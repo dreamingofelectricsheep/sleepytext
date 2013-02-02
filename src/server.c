@@ -13,8 +13,6 @@
 #include <time.h>
 
 #include "bytes.c"
-
-#include "base64.c"
 #include "epoll.c"
 
 int setup_socket(uint16_t port, void *ondata, void *onclose)
@@ -80,6 +78,7 @@ void http_ondata(struct http_connection *http)
 		http->onclose(http);
 	} else {
 		http->buffer.len += len;
+		write(0, http->buffer.as_void, http->buffer.len);
 
 		bfound f = bfind(http->buffer, Bs("\r\n\r\n"));
 
@@ -145,15 +144,11 @@ void http_ondata(struct http_connection *http)
 				return;
 			}
 
-			bytes reply = balloc(4096);
-			reply.length = snprintf(reply.as_char, 4096,
-				"Content-Length: %zd\r\n"
-				"Recipient: ", body.len);
-			bytes finish = Bs("\r\n\r\n");
+			bytes ack = Bs("HTTP/1.1 200 Ok\r\n"
+				"Content-Length: 0\r\n\r\n");
 
+			send(http->socket, ack.as_void, ack.len, 0);
 
-
-			bfree(reply);
 
 
 
@@ -198,48 +193,14 @@ void httplistener_onclose(struct generic_epoll_object *data)
 	free(data);
 };
 
-void stream_ondata(struct generic_epoll_object *stream) 
-{
-	char buffer[4096];
-	ssize_t r = recv(stream->fd, buffer, 4096, 0);
-	write(0, buffer, r);
-}
-
-void stream_onclose(struct generic_epoll_object *stream)
-{
-	debug("Closing stream socket. %d", stream->fd);
-	close(stream->fd);
-	free(stream);
-};
-
-
-
 int main(int argc, char **argv)
 {
 	epoll = epoll_create(1);
 
-	int http = setup_socket(8081, httplistener_ondata,
+	int http = setup_socket(8080, httplistener_ondata,
 				httplistener_onclose);
 
-	int stream = socket(AF_INET6, SOCK_STREAM, 0);
 	
-	struct sockaddr_in6 addr = {
-		.sin6_family = AF_INET6,
-		.sin6_port = htons(8080),
-		.sin6_addr = 0,
-		.sin6_scope_id = 0,
-		.sin6_flowinfo = 0 };
-
-	connect(stream, (void*) &addr, sizeof addr);
-
-	struct generic_epoll_object *object = malloc(sizeof(*object));
-
-	object->fd = stream;
-	object->ondata = stream_ondata;
-	object->onclose = stream_onclose;
-
-	epoll_add(stream, object);
-
 	epoll_listen();
 	return 0;
 }

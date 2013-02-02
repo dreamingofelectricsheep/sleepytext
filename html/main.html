@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>Text</title>
+<script type="text/javascript">
+window.onload = function() {
+var body = document.getElementsByTagName('body')[0]
+
+var editor = document.getElementById('editor')
+
+var last = ''
+var queue = [], intransfer = []
+
+
+editor.oninput = function(e) {
+	var text = e.target.value
+	var i = 0, j = 0
+
+
+	for(; i < last.length; i++) {
+		if(last[i] != text[i]) break; }
+
+	for(; last.length - j> i; j++) {
+		if(last[last.length-j-1] != text[text.length-j-1]) break; }
+
+
+	var ls = last.slice(i, last.length -j)
+	var ts = text.slice(i, text.length -j)
+	queue.push({
+		time: new Date().getTime(),
+		pos: i,
+		last: ls,
+		now: ts })
+
+	last = text
+}
+
+var request = new XMLHttpRequest()
+request.timeout = 5000
+request.ontimeout = function() {
+	alert("Timeout!")
+}
+
+request.onreadystatechange = function() {
+	if(request.readyState != 4) return;
+	if(request.status == 200) {
+		intransfer = []
+	}
+	else alert("Transfer error, code: " + request.status)
+}
+	
+
+function update() {
+	if(intransfer.length == 0 && queue.length > 0) {
+		intransfer = queue
+		queue = []
+
+		request.open('POST', '/feed')
+		request.send(JSON.stringify(intransfer))
+	}
+}
+
+setInterval(update, 1000)
+
+}
+</script>
+<style type='text/css'>
+body {
+	padding: 10px;
+	text-align: center;
+}
+
+#editor {
+	font: 20px serif normal;
+	background-image: none;
+	height: 100%;
+	width: 60%;
+	padding: 10px;
+	box-sizing: border-box;
+	border:1px solid #ffcc00;
+    box-shadow:0 0 3px #ffcc00;
+    -moz-box-shadow:0 0 3px #ffcc00;
+    -webkit-box-shadow:0 0 3px #ffcc00;
+	outline: none;
+	resize: none;
+	border-radius: 5px;
+}
+</style>
+</head>
+<body>
+<textarea id="editor" contenteditable="true"></textarea>
+</div>
+</body>
+</html>

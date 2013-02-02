@@ -2,10 +2,7 @@ VPATH=src
 FLAGS=-std=c11 -lrt
 CC=clang
 
-router: router.c 
-	$(CC) $(FLAGS) -o bin/$@ $^
-
-mail: mail.c
+server: server.c
 	$(CC) $(FLAGS) -o bin/$@ $^
 
 clean:
