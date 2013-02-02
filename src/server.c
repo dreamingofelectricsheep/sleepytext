@@ -110,7 +110,21 @@ void http_ondata(struct http_connection *http)
 				send(http->socket, page.as_void, page.len, 0);
 
 			}
-			else {
+			if(bsame(resource, Bs("/graph.js")) == 0) {
+				int f = open("html/graph.js", 0);
+				bytes page = balloc(1 << 20);
+				page.length = read(f, page.as_void, page.length);
+
+				bytes resp = balloc(4096);
+				resp.len = snprintf(resp.as_void, resp.len,
+					"HTTP/1.1 200 Ok\r\n"
+					"Content-Length: %zd\r\n\r\n", page.len);
+
+				send(http->socket, resp.as_void, resp.len, 0);
+				send(http->socket, page.as_void, page.len, 0);
+
+			}
+		else {
 				bytes resp = Bs("HTTP/1.1 404 Not found\r\n"
 					"Content-Length: 0\r\n\r\n");
 				send(http->socket, resp.as_void, resp.len, 0);

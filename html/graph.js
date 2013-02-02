@@ -14,17 +14,17 @@ function Graph( canvas_name, width, height ) {
 
 	// tunables to adjust the layout
 	this.repulsion = 200000; // repulsion constant, adjust for wider/narrower spacing
-	this.spring_length = 20; // base resting length of springs
+	this.spring_length = 50; // base resting length of springs
 }
 
 Graph.prototype.createVertex = function( name, color ) { // XXX -- should support separate id and name 
 	// create an SVG rectangle, attach additional attributed to it
 	var vertex = document.createElementNS(this.svg, "rect");
 	if( color === undefined ) {
-		color = "#222";
+		color = "#64B80B";
 	}
 	vertex.setAttribute("style", "fill: "+color+"; stroke-width: 1px;");
-	vertex.setAttribute("rx", "10px"); // round the edges
+	vertex.setAttribute("rx", "100%"); // round the edges
 	// random placement with a 10% margin at the edges
 	vertex.posx = Math.random() * (this.width * 0.8) + (this.width * 0.1);
 	vertex.posy = (Math.random() * (this.height * 0.8)) + (this.height * 0.1);
@@ -36,13 +36,13 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 	// text label
 	vertex.name = name;
 	vertex.textLabel = document.createElementNS(this.svg, "text");
-	vertex.textLabel.setAttribute("style", "fill: #fff; stroke-width: 1px;");
+	vertex.textLabel.setAttribute("style", "fill: black; stroke-width: 1px;");
 	vertex.textLabel.appendChild( document.createTextNode( name ) );	
 	this.canvas.appendChild( vertex.textLabel );
 	
 	// get the size of the rectangle from the text label's bounding box
-	vertex.h = vertex.textLabel.getBBox().height + 10;
-	vertex.w = vertex.textLabel.getBBox().width + 10;
+	vertex.h = 54
+	vertex.w = 54
 	vertex.setAttribute("height", vertex.h + "px");
 	vertex.setAttribute("width", vertex.w + "px");
 
@@ -52,7 +52,7 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 Graph.prototype.createEdge = function( a, b, style ) {
 	var line = document.createElementNS(this.svg, "path");
 	if( style === undefined ) {
-		style = "stroke: #444; stroke-width: 3px;";
+		style = "stroke: #444; stroke-width: 8px;";
 	}
 	line.setAttribute("style", style);
 	this.canvas.insertBefore(line, this.canvas.firstChild);
@@ -99,14 +99,14 @@ Graph.prototype.updateLayout = function() {
 		this.vertices[i].setAttribute("y", this.vertices[i].posy );
 		// update labels
 		this.vertices[i].textLabel.setAttribute("x", this.vertices[i].posx + 5 + "px");
-		this.vertices[i].textLabel.setAttribute("y", this.vertices[i].posy + (2*this.vertices[i].h/3 )+ "px");
+		this.vertices[i].textLabel.setAttribute("y", -50 + this.vertices[i].posy + (2*this.vertices[i].h/3 )+ "px");
 		// update edges
 		for (j in this.vertices[i].edges) {
 			this.vertices[i].edges[j].line.setAttribute("d", "M"+(this.vertices[i].posx+(this.vertices[i].w/2))+","+(this.vertices[i].posy+(this.vertices[i].h/2))+" L"+(this.vertices[this.vertices[i].edges[j].dest].posx+(this.vertices[this.vertices[i].edges[j].dest].w/2))+" "+(this.vertices[this.vertices[i].edges[j].dest].posy+(this.vertices[this.vertices[i].edges[j].dest].h/2)));
 		}
 	}
 	this.iteration++;
-	if( this.iteration > 300 ) // XXX -- should watch for rest state, not just quit after N iterations
+	if( this.iteration > 500 ) // XXX -- should watch for rest state, not just quit after N iterations
 		this.quit();
 }
 Graph.prototype.go = function() {
