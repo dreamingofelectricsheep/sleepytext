@@ -23,7 +23,7 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 	if( color === undefined ) {
 		color = "#64B80B";
 	}
-	vertex.setAttribute("style", "fill: "+color+"; stroke-width: 1px;");
+	vertex.setAttribute("style", "cursor: pointer; fill: "+color+"; stroke-width: 1px;");
 	vertex.setAttribute("rx", "100%"); // round the edges
 	// random placement with a 10% margin at the edges
 	vertex.posx = Math.random() * (this.width * 0.8) + (this.width * 0.1);
@@ -47,6 +47,7 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 	vertex.setAttribute("width", vertex.w + "px");
 
 	this.vertices[name] = vertex;
+	return vertex;
 }
 
 Graph.prototype.createEdge = function( a, b, style ) {

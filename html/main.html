@@ -11,27 +11,86 @@ editor.focus()
 
 var last = ''
 var queue = [], intransfer = []
-var root = {
-	time: new Date().getTime(),
-	steps: []
-	}
-var branch = {
-	length: 0,
-	pieces: [ { piece: root } ],
+
+var branches = []
+
+function branch(past) {
+	this.past = past
+	this.present = []
+	this.time = new Date().getTime()
+
+	branches.push(this)
 }
+
+branch.prototype = {
+	getlength: function() {
+		var past = 0
+		if(this.past) past = this.past.at
+		return past + this.present.length 
+	},
+	gethistory: function() {
+		var past = this.getprecedinghistory()
+		return past.concat(this.present)
+	},
+	getprecedinghistory: function() {
+		var result = []
+
+		if(this.past) {
+			result = this.past.branch.getprecedinghistory()
+			result = result.concat(this.past.branch.present.slice(0,
+				this.past.at - result.length))
+		}
+
+		return result
+	}
+}
+
+
+var activebranch = new branch()	
+var pointer = undefined
+
+function branchout() {
+		var past = undefined;
+		var i = activebranch
+
+		if(pointer == undefined) pointer = activebranch.getlength()
 	
-var pointer = 0
+		
+		while(true) {
+			if(i.past == undefined) {
+				past = { branch: i, at: pointer }
+				break;
+			}
+			if(i.past.at > pointer) {
+				i = i.past.branch
+			} else {
+				past = { branch: i, at: pointer }
+				break;
+			}
+		}
+		
+		activebranch = new branch(past)
+		pointer = undefined
+		historyslider.value = 10000
+}
 
 editor.oninput = function(e) {
+	if(pointer != undefined) {
+		branchout()
+	}
+
 	var text = e.target.value
 	var i = 0, j = 0
 
+	var min = Math.min(last.length, text.length)
 
-	for(; i < last.length; i++) {
+	for(; i < min; i++) {
 		if(last[i] != text[i]) break; }
 
-	for(; last.length - j> i + 1; j++) {
+	for(; min - j > i; j++) {
 		if(last[last.length-j-1] != text[text.length-j-1]) break; }
+
+	
 
 
 	var ls = last.slice(i, last.length -j)
@@ -43,9 +102,7 @@ editor.oninput = function(e) {
 		now: ts }
 
 	queue.push(change)
-	branch.pieces[branch.pieces.length - 1].piece.steps.push(change)
-	branch.length++
-	pointer++
+	activebranch.present.push(change)
 
 	last = text
 }
@@ -77,20 +134,47 @@ function update() {
 
 setInterval(update, 1000)
 
+var branchbutton = document.getElementById('branchbutton')
+
+branchbutton.onclick = function() {
+	branchout()
+}
+
+
 var graphbutton = document.getElementById('graphbutton')
 var graph = document.getElementById('graph')
+
 graphbutton.onclick = function() {
 	graph.classList.remove('hidden')
+	while(graph.firstChild)
+		graph.removeChild(graph.firstChild)
+
 	var g = new Graph('graph', window.innerWidth, window.innerHeight)
 
-	var all = historyconcat()
 
-	for(var i = 0; i < all.length; ++i) {
-		g.createVertex(all[i].time)	
-		if(i > 0)
-			g.createEdge(all[i].time,
-				all[i - 1].time)	
+	for(var i = 0; i < branches.length; ++i) {
+		var color = undefined;
+		if(branches[i].time == activebranch.time) color = '#D1CE19'
+		if(branches[i].past == undefined) color = '#1987D1'
+		var v = g.createVertex(branches[i].time, color)
+		v.branch = branches[i]	
+		v.onclick = function() {
+			last = ''
+			editor.value = ''
+			pointer = 0
+			historyslider.value = 10000
+			activebranch = this.branch
+			historygo(activebranch.getlength())
+			graph.classList.add('hidden')
+			pointer = undefined
+		}
 	}
+
+	for(var i = 0; i < branches.length; ++i) {
+		if(branches[i].past)
+			g.createEdge(branches[i].past.branch.time, branches[i].time)	
+	}
+
 
 	g.go()
 }
@@ -107,21 +191,10 @@ function historystepback(change) {
 			editor.value.length)
 }
 
-function historyconcat() {
-	var all = []
-	for(var i in branch.pieces) {
-		all = all.concat(branch.pieces[i].piece.steps.slice(0, branch.pieces[i].at))
-	}
-	return all
-}
-
 function historygo(go) {
-	if(pointer == go) return;
+	if(pointer != go) {
 
-	var all = historyconcat()
-	for(var i in branch.pieces) {
-		all = all.concat(branch.pieces[i].piece.steps.slice(0, branch.pieces[i].at))
-	}
+	var all = activebranch.gethistory()
 
 	while(pointer != go) {
 		if(pointer > go) {
@@ -134,13 +207,20 @@ function historygo(go) {
 		}
 	}	
 		
+	}
+
+	if(pointer == activebranch.getlength())
+		pointer = undefined
 }
 
 var historyslider = document.getElementById('historyslider')
-historyslider.oninput = function(e) {
-	var go = Math.floor(historyslider.value / 10000 * branch.length)
 
+historyslider.oninput = function(e) {
+	var go = Math.floor(historyslider.value / 10000 * activebranch.getlength())
+
+	if(pointer == undefined) pointer = activebranch.getlength()
 	historygo(go)
+	last = editor.value
 }
 	
 
@@ -162,7 +242,18 @@ body {
 	resize: none;
 	border-radius: 5px;
 }
+#branchbutton {
+	color: #9B8CCF;
+	cursor: pointer;
+	position: fixed;
+	font-family: sans-serif;
+	font-size: 14px;
+	right: 100px;
+	bottom: 10px;
+	line-height: 24px;
+}
 #graphbutton {
+	color: #9B8CCF;
 	cursor: pointer;
 	position: fixed;
 	font-family: sans-serif;
@@ -175,9 +266,9 @@ body {
 	position: fixed;
 	left: 0;
 	top: 0;
-	width: 1000px;
-	height: 1000px;
-	
+	width: 600px;
+	height: 600px;
+	background: white;
 }
 .hidden {
 	display: none;
@@ -192,7 +283,8 @@ body {
 </head>
 <body>
 <textarea id="editor"></textarea>
-<div id="graphbutton">history</div>
+<div id="graphbutton">graph</div>
+<div id="branchbutton">branch</div>
 <input type="range" id="historyslider" min="0" max="10000" step="1" value="10000" />
 <svg class="hidden" xmlns="http://www.w3.org/2000/svg" id="graph"></svg>
 </div>
