@@ -41,8 +41,8 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 	this.canvas.appendChild( vertex.textLabel );
 	
 	// get the size of the rectangle from the text label's bounding box
-	vertex.h = 54
-	vertex.w = 54
+	vertex.h = 34
+	vertex.w = 34
 	vertex.setAttribute("height", vertex.h + "px");
 	vertex.setAttribute("width", vertex.w + "px");
 
@@ -52,7 +52,7 @@ Graph.prototype.createVertex = function( name, color ) { // XXX -- should suppor
 Graph.prototype.createEdge = function( a, b, style ) {
 	var line = document.createElementNS(this.svg, "path");
 	if( style === undefined ) {
-		style = "stroke: #444; stroke-width: 8px;";
+		style = "stroke: #96DB4D; stroke-width: 8px;";
 	}
 	line.setAttribute("style", style);
 	this.canvas.insertBefore(line, this.canvas.firstChild);
