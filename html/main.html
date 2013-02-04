@@ -156,24 +156,38 @@ graphbutton.onclick = function() {
 
 	for(var i = 0; i < branches.length; ++i) {
 		var color = undefined;
-		if(branches[i].time == activebranch.time) color = '#D1CE19'
 		if(branches[i].past == undefined) color = '#1987D1'
 
 		var s = branches[i].present.length
 		if(s < 1) s = 1
-		s = 15 + Math.log(s) * 5
+		s = 7 + Math.log(s) * 2
 
 		
 		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
 
+		if(branches[i].time == activebranch.time)
+			g.active = v
+
 		v.branch = branches[i]	
 		var active = undefined
-	
+		var lastmouse = undefined
+
+		window.onmousedown = function(e) {
+			lastmouse = {
+				x: e.clientX, y: e.clientY } }
+				
 		window.onmousemove = function(e) {
+			if(lastmouse != undefined) {
+				g.x -= lastmouse.x - e.clientX
+				g.y -= lastmouse.y - e.clientY
+
+				lastmouse = { x: e.clientX, y: e.clientY }
+			}
+
 			for(var i in g.vertices) {
 				var v = g.vertices[i]
-				if(Math.abs(v.x - e.clientX) < v.size && 
-					Math.abs(v.y - e.clientY) < v.size) {
+				if(Math.abs(g.x + v.x - e.clientX) < v.size && 
+					Math.abs(g.y + v.y - e.clientY) < v.size) {
 					body.classList.add('clickable')
 					active = v.branch
 					return;
@@ -186,6 +200,7 @@ graphbutton.onclick = function() {
 
 				 
 		window.onmouseup = function() {
+			lastmouse = undefined
 			if(active == undefined) return
 
 			activebranch = active
@@ -198,6 +213,7 @@ graphbutton.onclick = function() {
 			body.removeChild(canvas)
 			window.onmouseup = undefined
 			window.onmousemove = undefined
+			window.onmousedown = undefined
 		}
 	}
 

@@ -1,4 +1,6 @@
 function Graph(canvas, textwidth, font) {
+	this.x = 0
+	this.y = 0
 	this.font = font
 	this.canvas = canvas
 	this.ctx = canvas.getContext('2d')
@@ -29,21 +31,6 @@ Graph.prototype.createVertex = function(id, color, size, text) {
 	vertex.x = this.canvas.width / 2 * (Math.random() + 1) * 0.5
 	vertex.y = this.canvas.height / 2 * (Math.random() + 1) * 0.5
 
-
-	var canvas = document.createElement('canvas')
-	canvas.width = this.textwidth
-	canvas.height = 10*this.canvas.height
-	var ctx = canvas.getContext('2d')
-	ctx.font = this.font
-	ctx.fillStyle = 'white'
-	ctx.fillRect(0, 0, canvas.width, canvas.height)
-	ctx.font = editor.style.font
-	ctx.fillStyle = 'gray'
-	ctx.fillText(text, 10, 10, this.textwidth)
-
-	vertex.image = new Image()
-	vertex.image.src = canvas.toDataURL('image/jpeg')
-	
 	this.vertices[id] = vertex
 	return vertex
 }
@@ -112,14 +99,27 @@ Graph.prototype.updateLayout = function() {
 
 	for(var i in this.vertices) {
 		var v = this.vertices[i]
-		ctx.drawImage(v.image, 0, 0)
+	//	ctx.drawImage(v.image, 0, 0)
 	}
+
+	var pulse = (new Date().getTime() % 1000) / 1000
+	pulse -= 0.5
+	pulse *= 2 * Math.PI
+	pulse = (Math.sin(pulse) + 1) / 2
+
+		var v = this.active
+		this.ctx.beginPath();
+		this.ctx.arc(this.x + v.x, this.y + v.y, v.size + 7 + pulse * 3, 
+			0, 2 * Math.PI, false);
+		this.ctx.fillStyle = '#E0BC1B'
+		this.ctx.fill();	
+
 
 	for(var i in this.edges) {
 		var e = this.edges[i]
 		this.ctx.beginPath();
-		this.ctx.moveTo(e.a.x, e.a.y)
-		this.ctx.lineTo(e.b.x, e.b.y)
+		this.ctx.moveTo(this.x + e.a.x, this.y + e.a.y)
+		this.ctx.lineTo(this.x + e.b.x, this.y + e.b.y)
 		this.ctx.strokeStyle = e.color
 		this.ctx.lineWidth = e.size
 		this.ctx.stroke();	
@@ -128,17 +128,13 @@ Graph.prototype.updateLayout = function() {
 	for(var i in this.vertices) {
 		var v = this.vertices[i]
 		this.ctx.beginPath();
-		this.ctx.arc(v.x, v.y, v.size, 0, 2 * Math.PI, false);
+		this.ctx.arc(this.x + v.x, this.y + v.y, v.size, 0, 2 * Math.PI, false);
 		this.ctx.fillStyle = v.color
 		this.ctx.fill();	
 
 
 	}
 
-	this.iteration++;
-
-	if( this.iteration > 500 ) 
-		this.quit();
 }
 Graph.prototype.go = function() {
 	// already running
@@ -147,7 +143,7 @@ Graph.prototype.go = function() {
 	}
 	obj = this;
 	this.iteration = 0;
-	this.task = window.setInterval(function(){ obj.updateLayout(); }, 1);
+	this.task = window.setInterval(function(){ obj.updateLayout(); }, 1000/60);
 }
 Graph.prototype.quit = function() {
 	window.clearInterval(this.task);
