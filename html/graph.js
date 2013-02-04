@@ -135,6 +135,37 @@ Graph.prototype.updateLayout = function() {
 
 	}
 
+	if(this.ending != undefined) {
+		var d = new Date().getTime() - this.ending.time
+
+		var v = this.ending.vertex
+		this.ctx.beginPath();
+		this.ctx.arc(this.x + v.x, this.y + v.y, 
+			v.size + d * d/ 100, 0, 2 * Math.PI, false);
+
+
+		function parse(s,p) {
+			return parseInt(s.substr(2*p+1,2),16) }
+
+		var c = [0,0,0]
+		var q = d / 300
+
+		for(var i = 0; i < 3;i++)
+			c[i] = parse(v.color,i)
+
+
+		for(var i = 0; i < 3;i++)
+			c[i] = Math.ceil(255 * q + c[i] * (1 - q))
+
+		console.log('rgb('+c[0]+','+c[1]+','+c[2]+')')
+		this.ctx.fillStyle = 'rgb('+c[0]+','+c[1]+','+c[2]+')'
+		this.ctx.fill();	
+
+		if(d > 300) 
+			this.ending.callback()
+
+	}
+
 }
 Graph.prototype.go = function() {
 	// already running

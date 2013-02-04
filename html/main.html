@@ -153,22 +153,6 @@ graphbutton.onclick = function() {
 
 	var g = new Graph(canvas, Math.floor(editor.clientWidth * 3/5), '20px serif normal')
 
-
-	for(var i = 0; i < branches.length; ++i) {
-		var color = undefined;
-		if(branches[i].past == undefined) color = '#1987D1'
-
-		var s = branches[i].present.length
-		if(s < 1) s = 1
-		s = 7 + Math.log(s) * 2
-
-		
-		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
-
-		if(branches[i].time == activebranch.time)
-			g.active = v
-
-		v.branch = branches[i]	
 		var active = undefined
 		var lastmouse = undefined
 
@@ -189,7 +173,7 @@ graphbutton.onclick = function() {
 				if(Math.abs(g.x + v.x - e.clientX) < v.size && 
 					Math.abs(g.y + v.y - e.clientY) < v.size) {
 					body.classList.add('clickable')
-					active = v.branch
+					active = v
 					return;
 				}
 			}
@@ -203,7 +187,16 @@ graphbutton.onclick = function() {
 			lastmouse = undefined
 			if(active == undefined) return
 
-			activebranch = active
+			window.onmouseup = undefined
+			window.onmousemove = undefined
+			window.onmousedown = undefined
+
+			g.ending = {
+				time: new Date().getTime(),
+				vertex: active,
+				callback: function() {
+
+			activebranch = active.branch
 			last = editor.value = activebranch.render
 			pointer = undefined
 			historyslider.value = 10000
@@ -211,11 +204,28 @@ graphbutton.onclick = function() {
 			g.quit()
 			body.classList.remove('clickable')
 			body.removeChild(canvas)
-			window.onmouseup = undefined
-			window.onmousemove = undefined
-			window.onmousedown = undefined
+			}
 		}
 	}
+	
+
+	for(var i = 0; i < branches.length; ++i) {
+		var color = undefined;
+		if(branches[i].past == undefined) color = '#1987D1'
+
+		var s = branches[i].present.length
+		if(s < 1) s = 1
+		s = 7 + Math.log(s) * 2
+
+		
+		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
+
+		if(branches[i].time == activebranch.time)
+			g.active = v
+
+		v.branch = branches[i]	
+	}
+	
 
 	for(var i = 0; i < branches.length; ++i) {
 		if(branches[i].past)
