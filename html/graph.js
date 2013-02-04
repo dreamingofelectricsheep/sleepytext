@@ -1,64 +1,71 @@
-function Graph( canvas_name, width, height ) {
-	this.svg = "http://www.w3.org/2000/svg";
-	this.canvas = document.getElementById(canvas_name);
-	this.width = width;
-	this.height = height;
-	this.canvas.style.width = width + "px";
-	this.canvas.style.height = height + "px";
+function Graph(canvas, textwidth, font) {
+	this.font = font
+	this.canvas = canvas
+	this.ctx = canvas.getContext('2d')
 	this.vertices = {};
+	this.edges = []
 	this.forcex = {};
 	this.forcey = {};
 	this.stepsize = 0.0005;
 	this.iteration = 0;
 	this.task = null;
+	this.textwidth = textwidth
 
 	// tunables to adjust the layout
 	this.repulsion = 200000; // repulsion constant, adjust for wider/narrower spacing
 	this.spring_length = 50; // base resting length of springs
 }
 
-Graph.prototype.createVertex = function( name, color ) { // XXX -- should support separate id and name 
-	// create an SVG rectangle, attach additional attributed to it
-	var vertex = document.createElementNS(this.svg, "rect");
-	if( color === undefined ) {
+Graph.prototype.createVertex = function(id, color, size, text) { 
+	if( color === undefined ) 
 		color = "#64B80B";
-	}
-	vertex.setAttribute("style", "cursor: pointer; fill: "+color+"; stroke-width: 1px;");
-	vertex.setAttribute("rx", "100%"); // round the edges
-	// random placement with a 10% margin at the edges
-	vertex.posx = Math.random() * (this.width * 0.8) + (this.width * 0.1);
-	vertex.posy = (Math.random() * (this.height * 0.8)) + (this.height * 0.1);
-	vertex.setAttribute("x", vertex.posx );
-	vertex.setAttribute("y", vertex.posy );
-	vertex.edges = new Array();
-	this.canvas.appendChild(vertex);
-	
-	// text label
-	vertex.name = name;
-	vertex.textLabel = document.createElementNS(this.svg, "text");
-	vertex.textLabel.setAttribute("style", "fill: black; stroke-width: 1px;");
-	vertex.textLabel.appendChild( document.createTextNode( name ) );	
-	this.canvas.appendChild( vertex.textLabel );
-	
-	// get the size of the rectangle from the text label's bounding box
-	vertex.h = 34
-	vertex.w = 34
-	vertex.setAttribute("height", vertex.h + "px");
-	vertex.setAttribute("width", vertex.w + "px");
 
-	this.vertices[name] = vertex;
-	return vertex;
+	var vertex = {
+		color: color,
+		size: size,
+		edges: []
+	}
+
+	vertex.x = this.canvas.width / 2 * (Math.random() + 1) * 0.5
+	vertex.y = this.canvas.height / 2 * (Math.random() + 1) * 0.5
+
+
+	var canvas = document.createElement('canvas')
+	canvas.width = this.textwidth
+	canvas.height = 10*this.canvas.height
+	var ctx = canvas.getContext('2d')
+	ctx.font = this.font
+	ctx.fillStyle = 'white'
+	ctx.fillRect(0, 0, canvas.width, canvas.height)
+	ctx.font = editor.style.font
+	ctx.fillStyle = 'gray'
+	ctx.fillText(text, 10, 10, this.textwidth)
+
+	vertex.image = new Image()
+	vertex.image.src = canvas.toDataURL('image/jpeg')
+	
+	this.vertices[id] = vertex
+	return vertex
 }
 
-Graph.prototype.createEdge = function( a, b, style ) {
-	var line = document.createElementNS(this.svg, "path");
-	if( style === undefined ) {
-		style = "stroke: #96DB4D; stroke-width: 8px;";
+Graph.prototype.createEdge = function(a, b, color, size) {
+	if(color == undefined)
+		color = '#86D479'
+
+	if(size == undefined)
+		size = 5
+	
+	var line = {
+		color: color,
+		size: size,
+		a: this.vertices[a],
+		b: this.vertices[b]
 	}
-	line.setAttribute("style", style);
-	this.canvas.insertBefore(line, this.canvas.firstChild);
+		
 	this.vertices[a].edges[b] = { "dest" : b, "line": line };
 	this.vertices[b].edges[a] = { "dest" : a, "line": line };
+
+	this.edges.push(line)
 }
 
 Graph.prototype.updateLayout = function() {
@@ -68,8 +75,8 @@ Graph.prototype.updateLayout = function() {
 		for (j in this.vertices) {
 			if( i !== j ) {
 				// using rectangle's center, bounding box would be better
-				var deltax = this.vertices[j].posx - this.vertices[i].posx;
-				var deltay = this.vertices[j].posy - this.vertices[i].posy;
+				var deltax = this.vertices[j].x - this.vertices[i].x;
+				var deltay = this.vertices[j].y - this.vertices[i].y;
 				var d2 = deltax * deltax + deltay * deltay;
 
 				// add some jitter if distance^2 is very small
@@ -92,22 +99,45 @@ Graph.prototype.updateLayout = function() {
 			}
 		}
 	}
+
 	for (i in this.vertices) {
 		// update rectangles
-		this.vertices[i].posx += this.forcex[i] * this.stepsize;
-		this.vertices[i].posy += this.forcey[i] * this.stepsize;
-		this.vertices[i].setAttribute("x", this.vertices[i].posx );
-		this.vertices[i].setAttribute("y", this.vertices[i].posy );
-		// update labels
-		this.vertices[i].textLabel.setAttribute("x", this.vertices[i].posx + 5 + "px");
-		this.vertices[i].textLabel.setAttribute("y", -50 + this.vertices[i].posy + (2*this.vertices[i].h/3 )+ "px");
-		// update edges
-		for (j in this.vertices[i].edges) {
-			this.vertices[i].edges[j].line.setAttribute("d", "M"+(this.vertices[i].posx+(this.vertices[i].w/2))+","+(this.vertices[i].posy+(this.vertices[i].h/2))+" L"+(this.vertices[this.vertices[i].edges[j].dest].posx+(this.vertices[this.vertices[i].edges[j].dest].w/2))+" "+(this.vertices[this.vertices[i].edges[j].dest].posy+(this.vertices[this.vertices[i].edges[j].dest].h/2)));
-		}
+		this.vertices[i].x += this.forcex[i] * this.stepsize;
+		this.vertices[i].y += this.forcey[i] * this.stepsize;
+		
 	}
+	this.ctx.fillStyle = 'white'
+	this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+	var ctx = this.ctx
+
+	for(var i in this.vertices) {
+		var v = this.vertices[i]
+		ctx.drawImage(v.image, 0, 0)
+	}
+
+	for(var i in this.edges) {
+		var e = this.edges[i]
+		this.ctx.beginPath();
+		this.ctx.moveTo(e.a.x, e.a.y)
+		this.ctx.lineTo(e.b.x, e.b.y)
+		this.ctx.strokeStyle = e.color
+		this.ctx.lineWidth = e.size
+		this.ctx.stroke();	
+	}
+
+	for(var i in this.vertices) {
+		var v = this.vertices[i]
+		this.ctx.beginPath();
+		this.ctx.arc(v.x, v.y, v.size, 0, 2 * Math.PI, false);
+		this.ctx.fillStyle = v.color
+		this.ctx.fill();	
+
+
+	}
+
 	this.iteration++;
-	if( this.iteration > 500 ) // XXX -- should watch for rest state, not just quit after N iterations
+
+	if( this.iteration > 500 ) 
 		this.quit();
 }
 Graph.prototype.go = function() {
