@@ -21,6 +21,7 @@ typedef struct {
 	union {
 		char *as_char;
 		void *as_void;
+		const void *as_cvoid;
 	};
 	union {
 		size_t length;

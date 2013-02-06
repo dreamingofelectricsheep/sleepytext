@@ -1,4 +1,5 @@
 int epoll;
+int epoll_stop = false;
 
 int epoll_add(int fd, void *data)
 {
@@ -29,7 +30,7 @@ void epoll_listen() {
 	int max_events = 1024;
 	struct epoll_event buffer[max_events];
 
-	while (true) {
+	while (epoll_stop == false) {
 		int ready = epoll_wait(epoll, buffer, max_events, -1);
 
 		for (int i = 0; i < ready; i++) {

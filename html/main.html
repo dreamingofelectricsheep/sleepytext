@@ -116,25 +116,53 @@ request.ontimeout = function() {
 }
 
 request.onreadystatechange = function() {
-	if(request.readyState != 4) return;
-	if(request.status == 200) {
-		intransfer = []
+	if(request.readyState != 4) return
+	if(request.status != 200) {
+		alert("Login failed!")
+		return
 	}
-	else alert("Transfer error, code: " + request.status)
-}
+		
+
+
+	request.onreadystatechange = function() {
+		if(request.readyState != 4) return;
+		if(request.status == 200) {
+				intransfer = []
+		}
+		else alert("Transfer error, code: " + request.status)
+	}
 	
 
-function update() {
-	if(intransfer.length == 0 && queue.length > 0) {
-		intransfer = queue
-		queue = []
+	function update() {
+		if(intransfer.length == 0 && queue.length > 0) {
+			intransfer = queue
+			queue = []
 
-		request.open('POST', '/feed')
-		request.send(JSON.stringify(intransfer))
+			request.open('POST', '/feed')
+			request.send(JSON.stringify(intransfer))
+		}
 	}
+
+	setInterval(update, 1000)
+
 }
 
-setInterval(update, 1000)
+var user = localStorage.user
+if(user == undefined) {
+	request.open('POST', '/user')
+	user = {
+		login: Math.random() * 999999999999,
+		password: Math.random() * 99999999999
+	}
+
+	request.send(user.login + '\n' + user.password)
+	localStorage.user = JSON.stringify(user)
+} else {
+	user = JSON.parse(user)
+	request.open('POST', '/login')
+	
+	request.send(user.login + '\n' + user.password)
+}
 
 var branchbutton = document.getElementById('branchbutton')
 

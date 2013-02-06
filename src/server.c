@@ -11,9 +11,21 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
+
+#include "sqlite3.h"
+
 
 #include "bytes.c"
 #include "epoll.c"
+
+
+sqlite3 * db;
+sqlite3_stmt * selectpassword;
+sqlite3_stmt * updatepassword;
+sqlite3_stmt * updatelogin;
+sqlite3_stmt * updatelastseen;
+sqlite3_stmt * insertuser;
 
 int setup_socket(uint16_t port, void *ondata, void *onclose)
 {
@@ -55,6 +67,8 @@ struct http_connection {
 	http_fn ondata;
 	http_fn onclose;
 	bytes buffer;
+	int user;
+	struct in6_addr ip;
 };
 
 void http_onclose(struct http_connection *http)
@@ -124,6 +138,9 @@ void http_ondata(struct http_connection *http)
 				send(http->socket, page.as_void, page.len, 0);
 
 			}
+			if(bsame(resource, Bs("/stop")) == 0) {
+				epoll_stop = 1;
+			}
 		else {
 				bytes resp = Bs("HTTP/1.1 404 Not found\r\n"
 					"Content-Length: 0\r\n\r\n");
@@ -135,7 +152,7 @@ void http_ondata(struct http_connection *http)
 		} else if (http->buffer.as_char[0] == 'P') {
 			f = bfind(header, Bs(" "));
 			f = bfind(f.after, Bs(" "));
-			bytes addr = bslice(f.before, 1, 0);
+			bytes addr = f.before;
 
 			if (addr.len == 0)
 				goto bad_request;
@@ -156,11 +173,67 @@ void http_ondata(struct http_connection *http)
 				debug("Partial body. %zd out of %zd received.",
 				      body.len, contentlen);
 				return;
-			}
+			}	
 
 			bytes ack = Bs("HTTP/1.1 200 Ok\r\n"
 				"Content-Length: 0\r\n\r\n");
 
+
+
+			if(bsame(addr, Bs("/login")) == 0) {
+				f = bfind(body, Bs("\n"));
+
+				bytes user = f.before;
+				bytes password = f.after;
+
+				sqlite3_reset(selectpassword);
+				sqlite3_bind_text(selectpassword, 1, user.as_void, user.len, 0);
+
+				if(sqlite3_step(selectpassword) != SQLITE_ROW) {
+					goto bad_request;
+				}
+
+				bytes dbpassword = {
+					.len = sqlite3_column_bytes(selectpassword, 0),
+					.as_cvoid = sqlite3_column_blob(selectpassword, 0) };
+
+				uint64_t id = sqlite3_column_int64(selectpassword, 1);
+
+
+				if(bsame(password, dbpassword) == 0) {
+					http->user = id;
+					send(http->socket, ack.as_void, ack.len, 0);
+
+					goto complete_request;
+				}
+				else {
+					goto bad_request;
+				}
+				
+
+			} else if(bsame(addr, Bs("/user")) == 0) {
+				f = bfind(body, Bs("\n"));
+
+				bytes user = f.before;
+				bytes password = f.after;
+		
+				sqlite3_reset(insertuser);
+				sqlite3_bind_text(insertuser, 1, user.as_void, user.len, 0);
+				sqlite3_bind_blob(insertuser, 2, password.as_void, password.len, 0);
+
+				if(sqlite3_step(insertuser) != SQLITE_DONE) {
+					goto bad_request;
+				}
+				else {
+					http->user = sqlite3_last_insert_rowid(db);
+					send(http->socket, ack.as_void, ack.len, 0);
+					goto complete_request;
+				}
+			}
+				
+				
+
+				
 			send(http->socket, ack.as_void, ack.len, 0);
 
 
@@ -188,14 +261,18 @@ void http_ondata(struct http_connection *http)
 void httplistener_ondata(struct generic_epoll_object *data)
 {
 	int socket = data->fd;
-	int accepted = accept(socket, 0, 0);
+	struct sockaddr_in6 addr;
+	int accepted = accept(socket, &addr, sizeof(addr));
+
 	debug("Accepting a new connection: %d", accepted);
 	struct http_connection *c = malloc(sizeof(*c));
+	c->user = 0;
 	c->socket = accepted;
 	c->ondata = http_ondata;
 	c->onclose = http_onclose;
 	c->buffer.len = 0;
 	c->buffer.as_void = malloc(4096);
+	memcpy(c->ip, addr.sin6_addr, sizeof(addr.sin6_addr);
 
 	epoll_add(accepted, c);
 }
@@ -207,14 +284,48 @@ void httplistener_onclose(struct generic_epoll_object *data)
 	free(data);
 };
 
+void stop() {
+}
+
 int main(int argc, char **argv)
 {
-	epoll = epoll_create(1);
+	signal(SIGABRT, &stop);
+	signal(SIGHUP, &stop);
+	signal(SIGINT, &stop);
+	signal(SIGTERM, &stop);
 
+	epoll = epoll_create(1);
+	sqlite3_open("./db", &db);
+
+
+#define ps(s, v) \
+	if(sqlite3_prepare_v2(db,\
+		s, -1, &v, 0) != SQLITE_OK) {\
+		debug(s); \
+		goto cleanup; }
+	
+	ps("select password, id from users where login = ?", selectpassword)
+	ps("update users set password = ? where id = ?", updatepassword)
+	ps("update users set login = ? where id = ?", updatelogin)
+	ps("update users set lastseen = date('now') where id = ?", updatelastseen)
+	ps("insert into users(login, password, created, lastseen) "
+		"values(?, ?, datetime('now'), datetime('now'))", insertuser)
+
+		
 	int http = setup_socket(8080, httplistener_ondata,
 				httplistener_onclose);
 
 	
 	epoll_listen();
+
+cleanup:
+
+	sqlite3_finalize(selectpassword);
+	sqlite3_finalize(updatepassword);
+	sqlite3_finalize(updatelogin);
+	sqlite3_finalize(updatelastseen);
+	sqlite3_finalize(insertuser);
+
+	sqlite3_close(db);
 	return 0;
 }
