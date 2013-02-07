@@ -1,8 +1,13 @@
-int epoll;
+#include <time.h>
+
+int epoll = 0;
 int epoll_stop = false;
+int epoll_time = 0;
 
 int epoll_add(int fd, void *data)
 {
+	// Lever triggered mode - epoll events fire as long
+	// as there is data available for reading.
 	struct epoll_event e;
 	e.events = EPOLLIN;
 	e.data.ptr = data;
@@ -32,6 +37,10 @@ void epoll_listen() {
 
 	while (epoll_stop == false) {
 		int ready = epoll_wait(epoll, buffer, max_events, -1);
+
+		// To avoid making multiple syscalls, we get the time once per
+		// epoll tick.
+		epoll_time = time(0);
 
 		for (int i = 0; i < ready; i++) {
 			int events = buffer[i].events;

@@ -12,6 +12,9 @@
 #include <errno.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/types.h>
+#define _GNU_SOURCE
+#include <dirent.h>
 
 #include "sqlite3.h"
 
@@ -26,6 +29,11 @@ sqlite3_stmt * updatepassword;
 sqlite3_stmt * updatelogin;
 sqlite3_stmt * updatelastseen;
 sqlite3_stmt * insertuser;
+
+sqlite3_stmt * insertbranch;
+sqlite3_stmt * selectdocument;
+
+int lastblob = 0;
 
 int setup_socket(uint16_t port, void *ondata, void *onclose)
 {
@@ -66,45 +74,83 @@ struct http_connection {
 	int socket;
 	http_fn ondata;
 	http_fn onclose;
-	bytes buffer;
+	bytes request;
 	int user;
+	int session;
 	struct in6_addr ip;
+	time_t last;
 };
+
+int page_len = 0;
+int http_request_pages = 10;
 
 void http_onclose(struct http_connection *http)
 {
 	debug("Closing http connection: %d", http->socket);
-	free(http->buffer.as_void);
+	free(http->request.as_void);
 	close(http->socket);
 	free(http);
 }
 
 void http_ondata(struct http_connection *http)
 {
-	ssize_t len = recv(http->socket,
-			   http->buffer.as_void + http->buffer.len,
-			   4096 - http->buffer.len, 0);
+	http->last = epoll_time;
+	bool data_available = true;
 
-	if (len == 0) {
-		http->onclose(http);
-	} else if (len < 0) {
-		debug("Read error! %s", strerror(errno));
-		http->onclose(http);
-	} else {
-		http->buffer.len += len;
-		write(0, http->buffer.as_void, http->buffer.len);
+	while(data_available) {
+		// If all space is filled, we increase it by one page.
+		size_t space_available = http->request.len % page_len;
+		space_available = page_len - space_available;
 
-		bfound f = bfind(http->buffer, Bs("\r\n\r\n"));
+		if(space_available == 0) {
+			http->request.as_void = realloc(http->request.as_void, 
+				http->request.len + page_len);
+			space_available = page_len;
+		}
 
-		if (f.found.len == 0) {
-			debug("Partial http header.");
+
+		ssize_t len = recv(http->socket,
+			http->request.as_void + http->request.len,
+			space_available, MSG_DONTWAIT);
+
+
+		if (len == 0) {
+			http->onclose(http);
 			return;
 		}
+
+		if (len < 0) {
+			if (len == EAGAIN || len == EWOULDBLOCK) {
+				data_available = false;
+			}
+			else {
+				debug("Read error! %s", strerror(errno));
+				http->onclose(http);
+				return;
+			}
+		}
+	
+		http->request.len += len;
+		
+		if(len != page_len) {
+			data_available = false;
+		}
+	}
+
+
+		write(0, http->request.as_void, http->request.len);
+
+	bfound f = bfind(http->request, Bs("\r\n\r\n"));
+
+	if (f.found.len == 0) {
+		debug("Partial http header.");
+		return;
+	}
 
 		bytes header = f.before;
 		bytes body = f.after;
 
-		if (http->buffer.as_char[0] == 'G') {
+		if (http->request.as_char[0] == 'G') {
 			f = bfind(header, Bs(" "));
 			f = bfind(f.after, Bs(" "));
 
@@ -138,6 +184,29 @@ void http_ondata(struct http_connection *http)
 				send(http->socket, page.as_void, page.len, 0);
 
 			}
+			f = bfind(resource, Bs("/"));
+			f = bfind(resource, Bs("/"));
+
+			if(bsame(f.before, Bs("branch")) == 0) {
+
+				int blobid = btoi(f.after);
+
+				bytes path = balloc(256);
+				snprintf(path.as_void, path.len, "./branches/%d", blobid);
+				
+				int f = open(path.as_char, O_RDONLY);
+				bytes page = balloc(1 << 20);
+				page.length = read(f, page.as_void, page.length);
+
+				bytes resp = balloc(4096);
+				resp.len = snprintf(resp.as_void, resp.len,
+					"HTTP/1.1 200 Ok\r\n"
+					"Content-Length: %zd\r\n\r\n", page.len);
+
+				send(http->socket, resp.as_void, resp.len, 0);
+				send(http->socket, page.as_void, page.len, 0);
+
+			}
 			if(bsame(resource, Bs("/stop")) == 0) {
 				epoll_stop = 1;
 			}
@@ -149,7 +218,7 @@ void http_ondata(struct http_connection *http)
 			
 			goto complete_request;
 
-		} else if (http->buffer.as_char[0] == 'P') {
+		} else if (http->request.as_char[0] == 'P') {
 			f = bfind(header, Bs(" "));
 			f = bfind(f.after, Bs(" "));
 			bytes addr = f.before;
@@ -202,6 +271,9 @@ void http_ondata(struct http_connection *http)
 
 				if(bsame(password, dbpassword) == 0) {
 					http->user = id;
+
+					sqlite3_reset(updatelastseen);
+					sqlite3_step(updatelastseen);
 					send(http->socket, ack.as_void, ack.len, 0);
 
 					goto complete_request;
@@ -243,7 +315,6 @@ void http_ondata(struct http_connection *http)
 		} else {
 			goto bad_request;
 		}
-	}
 	return;
 
  bad_request:
@@ -255,24 +326,26 @@ void http_ondata(struct http_connection *http)
 	goto complete_request;
 
  complete_request:
-	http->buffer.len = 0;
+	http->request.len = 0;
 }
 
 void httplistener_ondata(struct generic_epoll_object *data)
 {
 	int socket = data->fd;
 	struct sockaddr_in6 addr;
-	int accepted = accept(socket, &addr, sizeof(addr));
+	socklen_t len = sizeof(addr);
+	int accepted = accept(socket, (void*) &addr, &len);
 
 	debug("Accepting a new connection: %d", accepted);
 	struct http_connection *c = malloc(sizeof(*c));
 	c->user = 0;
+	c->session = 0;
 	c->socket = accepted;
 	c->ondata = http_ondata;
 	c->onclose = http_onclose;
-	c->buffer.len = 0;
-	c->buffer.as_void = malloc(4096);
-	memcpy(c->ip, addr.sin6_addr, sizeof(addr.sin6_addr);
+	c->request.len = 0;
+	c->request.as_void = malloc(4096);
+	memcpy(&c->ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
 
 	epoll_add(accepted, c);
 }
@@ -285,6 +358,18 @@ void httplistener_onclose(struct generic_epoll_object *data)
 };
 
 void stop() {
+	sqlite3_interrupt(db);
+
+	sqlite3_stmt * s = 0;
+	
+	do {
+		sqlite3_finalize(s);
+		s = sqlite3_next_stmt(db, s);
+	} while(s != 0);
+
+	sqlite3_close(db);
+
+	exit(0);
 }
 
 int main(int argc, char **argv)
@@ -296,6 +381,20 @@ int main(int argc, char **argv)
 
 	epoll = epoll_create(1);
 	sqlite3_open("./db", &db);
+
+	page_len = sysconf(_SC_PAGESIZE);
+
+	DIR * d = opendir("./branches/");
+	
+	if(d == 0) 
+		debug("Could not open branches directory: %s", strerror(errno));
+
+	struct dirent * ent = readdir(d);
+	while(ent != 0) {
+		if(ent->d_type == DT_REG)
+			lastblob++;
+		ent = readdir(d);
+	}	
 
 
 #define ps(s, v) \
@@ -311,6 +410,11 @@ int main(int argc, char **argv)
 	ps("insert into users(login, password, created, lastseen) "
 		"values(?, ?, datetime('now'), datetime('now'))", insertuser)
 
+	ps("insert into branches(userid, docid, blobid, parentid, pos) "
+		"values(?, ?, ?, ?, ?)", insertbranch);
+	ps("select id, blobid, parentid, pos from branches where "
+		"docid = ?", selectdocument);
+
 		
 	int http = setup_socket(8080, httplistener_ondata,
 				httplistener_onclose);
@@ -320,12 +424,7 @@ int main(int argc, char **argv)
 
 cleanup:
 
-	sqlite3_finalize(selectpassword);
-	sqlite3_finalize(updatepassword);
-	sqlite3_finalize(updatelogin);
-	sqlite3_finalize(updatelastseen);
-	sqlite3_finalize(insertuser);
+	stop();
 
-	sqlite3_close(db);
 	return 0;
 }

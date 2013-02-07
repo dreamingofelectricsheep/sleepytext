@@ -22,6 +22,7 @@ typedef struct {
 		char *as_char;
 		void *as_void;
 		const void *as_cvoid;
+		const char *as_cchar;
 	};
 	union {
 		size_t length;
@@ -57,7 +58,7 @@ void bfree(bytes buf)
 	free(buf.as_char);
 }
 
-bytes bfromstr(char *c_str)
+bytes bfromstr(const char *c_str)
 {
 	size_t null = 0;
 	while (c_str[null] != 0) {
@@ -184,7 +185,7 @@ bfound bfind(bytes in, bytes what)
 	return f;
 }
 
-int bcmp(bytes first, bytes second)
+int bcmp2(bytes first, bytes second)
 {
 	size_t length = min(first.length, second.length);
 	return memcmp(first.as_char, second.as_char, length);
