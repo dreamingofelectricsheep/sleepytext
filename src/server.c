@@ -22,6 +22,9 @@
 #include "bytes.c"
 #include "epoll.c"
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 
 sqlite3 * db;
 sqlite3_stmt * selectpassword;
@@ -34,6 +37,8 @@ sqlite3_stmt * insertbranch;
 sqlite3_stmt * selectdocument;
 
 int lastblob = 0;
+
+SSL_CTX * tls = 0;
 
 int setup_socket(uint16_t port, void *ondata, void *onclose)
 {
@@ -79,6 +84,7 @@ struct http_connection {
 	int session;
 	struct in6_addr ip;
 	time_t last;
+	SSL * tls;
 };
 
 int page_len = 0;
@@ -87,10 +93,12 @@ int http_request_pages = 10;
 void http_onclose(struct http_connection *http)
 {
 	debug("Closing http connection: %d", http->socket);
-	free(http->request.as_void);
+	bfree(&http->request);
 	close(http->socket);
 	free(http);
 }
+
+const size_t tls_frame_len = 16 * 1024;
 
 void http_ondata(struct http_connection *http)
 {
@@ -99,19 +107,19 @@ void http_ondata(struct http_connection *http)
 
 	while(data_available) {
 		// If all space is filled, we increase it by one page.
-		size_t space_available = http->request.len % page_len;
-		space_available = page_len - space_available;
+		size_t space_available = http->request.len % tls_frame_len;
+		space_available = tls_frame_len- space_available;
 
-		if(space_available == 0) {
+		if(space_available == tls_frame_len) {
 			http->request.as_void = realloc(http->request.as_void, 
-				http->request.len + page_len);
-			space_available = page_len;
+				http->request.len + tls_frame_len);
+			space_available = tls_frame_len;
 		}
 
 
-		ssize_t len = recv(http->socket,
+		int len = SSL_read(http->tls,
 			http->request.as_void + http->request.len,
-			space_available, MSG_DONTWAIT);
+			space_available);
 
 
 		if (len == 0) {
@@ -120,19 +128,20 @@ void http_ondata(struct http_connection *http)
 		}
 
 		if (len < 0) {
-			if (len == EAGAIN || len == EWOULDBLOCK) {
-				data_available = false;
-			}
-			else {
-				debug("Read error! %s", strerror(errno));
+		//	if (len == EAGAIN || len == EWOULDBLOCK) {
+		//		data_available = false;
+		//	}
+		//	else {
+				
+				ERR_print_errors_fp(stderr);
 				http->onclose(http);
 				return;
-			}
+		//	}
 		}
 	
 		http->request.len += len;
 		
-		if(len != page_len) {
+		if(len != tls_frame_len) {
 			data_available = false;
 		}
 	}
@@ -147,16 +156,38 @@ void http_ondata(struct http_connection *http)
 		return;
 	}
 
-		bytes header = f.before;
-		bytes body = f.after;
+	bytes header = f.before;
+	bytes body = f.after;
+
+	f = bfind(header, Bs("Content-Length: "));
+
+	if(f.found.len > 0) {
+		f = bfind(f.after, Bs("\r\n"));
+
+		int contentlen = btoi(f.before);
+
+		if (contentlen <= 0)
+			goto bad_request;
+	
+		if (contentlen != body.len) {
+			debug("Partial body received.");
+			return;
+		}
+	}
+
+	f = bfind(header, Bs(" "));
+	f = bfind(f.after, Bs(" "));
+
+	bytes addr = f.before;
+
+
 
 		if (http->request.as_char[0] == 'G') {
-			f = bfind(header, Bs(" "));
-			f = bfind(f.after, Bs(" "));
 
-			bytes resource = f.before;
+			f = bfind(addr, Bs("/"));
+			f = bfind(addr, Bs("/"));
 
-			if(bsame(resource, Bs("/")) == 0) {
+			if(bsame(addr, Bs("/")) == 0) {
 				int f = open("html/main.html", 0);
 				bytes page = balloc(1 << 20);
 				page.length = read(f, page.as_void, page.length);
@@ -166,11 +197,10 @@ void http_ondata(struct http_connection *http)
 					"HTTP/1.1 200 Ok\r\n"
 					"Content-Length: %zd\r\n\r\n", page.len);
 
-				send(http->socket, resp.as_void, resp.len, 0);
-				send(http->socket, page.as_void, page.len, 0);
-
+				SSL_write(http->tls, resp.as_void, resp.len);
+				SSL_write(http->tls, page.as_void, page.len);
 			}
-			if(bsame(resource, Bs("/graph.js")) == 0) {
+			else if(bsame(addr, Bs("/graph.js")) == 0) {
 				int f = open("html/graph.js", 0);
 				bytes page = balloc(1 << 20);
 				page.length = read(f, page.as_void, page.length);
@@ -180,14 +210,12 @@ void http_ondata(struct http_connection *http)
 					"HTTP/1.1 200 Ok\r\n"
 					"Content-Length: %zd\r\n\r\n", page.len);
 
-				send(http->socket, resp.as_void, resp.len, 0);
-				send(http->socket, page.as_void, page.len, 0);
+				SSL_write(http->tls, resp.as_void, resp.len);
+				SSL_write(http->tls, page.as_void, page.len);
 
 			}
-			f = bfind(resource, Bs("/"));
-			f = bfind(resource, Bs("/"));
 
-			if(bsame(f.before, Bs("branch")) == 0) {
+			else if(bsame(f.before, Bs("branch")) == 0) {
 
 				int blobid = btoi(f.after);
 
@@ -203,46 +231,25 @@ void http_ondata(struct http_connection *http)
 					"HTTP/1.1 200 Ok\r\n"
 					"Content-Length: %zd\r\n\r\n", page.len);
 
-				send(http->socket, resp.as_void, resp.len, 0);
-				send(http->socket, page.as_void, page.len, 0);
+				SSL_write(http->tls, resp.as_void, resp.len);
+				SSL_write(http->tls, page.as_void, page.len);
 
 			}
-			if(bsame(resource, Bs("/stop")) == 0) {
+			else if(bsame(addr, Bs("/stop")) == 0) {
 				epoll_stop = 1;
 			}
 		else {
 				bytes resp = Bs("HTTP/1.1 404 Not found\r\n"
 					"Content-Length: 0\r\n\r\n");
-				send(http->socket, resp.as_void, resp.len, 0);
+				SSL_write(http->tls, resp.as_void, resp.len);
 			}
 			
 			goto complete_request;
 
 		} else if (http->request.as_char[0] == 'P') {
-			f = bfind(header, Bs(" "));
-			f = bfind(f.after, Bs(" "));
-			bytes addr = f.before;
 
-			if (addr.len == 0)
+			if (body.len == 0)
 				goto bad_request;
-
-			f = bfind(header, Bs("Content-Length: "));
-
-			if (f.found.len == 0)
-				goto bad_request;
-
-			f = bfind(f.after, Bs("\r\n"));
-
-			int contentlen = btoi(f.before);
-
-			if (contentlen <= 0)
-				goto bad_request;
-
-			if (body.len < contentlen) {
-				debug("Partial body. %zd out of %zd received.",
-				      body.len, contentlen);
-				return;
-			}	
 
 			bytes ack = Bs("HTTP/1.1 200 Ok\r\n"
 				"Content-Length: 0\r\n\r\n");
@@ -274,7 +281,7 @@ void http_ondata(struct http_connection *http)
 
 					sqlite3_reset(updatelastseen);
 					sqlite3_step(updatelastseen);
-					send(http->socket, ack.as_void, ack.len, 0);
+					SSL_write(http->tls, ack.as_void, ack.len);
 
 					goto complete_request;
 				}
@@ -298,7 +305,7 @@ void http_ondata(struct http_connection *http)
 				}
 				else {
 					http->user = sqlite3_last_insert_rowid(db);
-					send(http->socket, ack.as_void, ack.len, 0);
+					SSL_write(http->tls, ack.as_void, ack.len);
 					goto complete_request;
 				}
 			}
@@ -306,7 +313,7 @@ void http_ondata(struct http_connection *http)
 				
 
 				
-			send(http->socket, ack.as_void, ack.len, 0);
+			SSL_write(http->tls, ack.as_void, ack.len);
 
 
 
@@ -321,12 +328,20 @@ void http_ondata(struct http_connection *http)
 	debug("Bad request");
 
 	bytes resp = Bs("HTTP/1.1 400 Bad Request\r\n\r\n");
-	send(http->socket, resp.as_void, resp.len, 0);
+	SSL_write(http->tls, resp.as_void, resp.len);
 	http->onclose(http);
 	goto complete_request;
 
  complete_request:
-	http->request.len = 0;
+	bfree(&http->request);
+}
+
+void tls_ondata(struct http_connection *http) {
+	debug("SSL_accept on %d", http->socket);
+	http->ondata = http_ondata;
+	
+				ERR_print_errors_fp(stderr);
+	debug("done accepting");
 }
 
 void httplistener_ondata(struct generic_epoll_object *data)
@@ -344,8 +359,12 @@ void httplistener_ondata(struct generic_epoll_object *data)
 	c->ondata = http_ondata;
 	c->onclose = http_onclose;
 	c->request.len = 0;
-	c->request.as_void = malloc(4096);
+	c->request.as_void = 0;
 	memcpy(&c->ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
+
+	c->tls = SSL_new(tls);
+	SSL_set_fd(c->tls, c->socket);
+	SSL_set_accept_state(c->tls);
 
 	epoll_add(accepted, c);
 }
@@ -415,6 +434,22 @@ int main(int argc, char **argv)
 	ps("select id, blobid, parentid, pos from branches where "
 		"docid = ?", selectdocument);
 
+
+	SSL_library_init();
+	ERR_load_crypto_strings();
+	SSL_load_error_strings();
+	tls = SSL_CTX_new(SSLv23_server_method());
+	if(SSL_CTX_use_certificate_file(tls, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+		debug("Error loading the certificate.");
+	}
+
+	if(SSL_CTX_use_PrivateKey_file(tls, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+		debug("Could not load private key.");
+	}
+
+	if(SSL_CTX_set_cipher_list(tls, "DEFAULT") != 1) {
+		debug("Adding ciphers failed.");
+	}
 		
 	int http = setup_socket(8080, httplistener_ondata,
 				httplistener_onclose);

@@ -53,9 +53,11 @@ bytes balloc(size_t length)
 	return r;
 }
 
-void bfree(bytes buf)
+void bfree(bytes * buf)
 {
-	free(buf.as_char);
+	free(buf->as_char);
+	buf->as_void = 0;
+	buf->len = 0;
 }
 
 bytes bfromstr(const char *c_str)
