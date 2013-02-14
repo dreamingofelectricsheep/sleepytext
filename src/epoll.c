@@ -1,3 +1,5 @@
+#ifndef EPOLL_C
+#define EPOLL_C
 #include <time.h>
 
 int epoll = 0;
@@ -63,4 +65,4 @@ void epoll_listen() {
 	}
 
 }
-
+#endif

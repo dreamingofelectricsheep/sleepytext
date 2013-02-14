@@ -67,7 +67,7 @@ bytes bfromstr(const char *c_str)
 		null++;
 	}
 
-	bytes r = { c_str, null };
+	bytes r = { (void*)  c_str, null };
 	return r;
 }
 
