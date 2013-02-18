@@ -6,18 +6,154 @@
 window.onload = function() {
 var body = document.getElementsByTagName('body')[0]
 
-var editor = document.getElementById('editor')
-editor.focus()
+var view;
 
-var last = ''
+function slider(parent, onchange) {
+	this.parent = parent
+	this.bar = document.createElement('div')
+	this.bar.setAttribute('class', 'slider-bar')
+	this.knob = document.createElement('div')
+
+	var that = this
+
+	this.knob.onmousedown = this.bar.onmousedown = function(e) {
+		var f = function(e) {
+			var offset = e.clientX - that.bar.offsetLeft 
+
+			var p = offset / that.bar.offsetWidth			
+			that.to(p)
+		}
+
+		f(e)
+
+		window.onmousemove = f 
+		window.onmouseup = function() {
+			window.onmousemove = undefined
+			window.onmouseup = undefined
+		}
+	}
+			
+	this.bar.appendChild(this.knob)
+	parent.appendChild(this.bar)
+
+	this.to(1)
+
+	this.onchange = onchange
+}
+
+slider.prototype = {
+	to: function(p) {
+		if(p < 0) p = 0
+		if(p > 1) p = 1
+
+		var offset = this.bar.offsetWidth * p - this.knob.offsetWidth / 2
+		this.knob.style.left = offset + 'px'
+
+		this.position = p
+
+		if(this.onchange == undefined) return
+		this.onchange(this.position)
+	},
+	despawn: function() {
+		this.parent.removeChild(this.bar)
+	}
+}
+
+
+function entereditorview() {
+	view = {}
+	view.editor = document.createElement("textarea")
+	view.editor.setAttribute('autocomplete', 'off')
+	view.editor.setAttribute('id', 'editor')
+	view.editor.last = ''
+
+
+	view.graph = document.createElement('div')
+	view.graph.setAttribute('id', 'graphbutton')
+	view.graph.innerHTML = 'graph'
+
+	view.branchbtn = document.createElement('div')
+	view.branchbtn.setAttribute('id', 'branchbutton')
+	view.branchbtn.innerHTML = 'branch'
+
+	view.slider = new slider(body, function(p) {
+		var go = Math.floor(p * view.branch.getlength())
+
+		view.history.go(go)
+		view.editor.last = view.editor.value = view.history.render
+	})
+
+	view.branch = new branch()
+	view.history = view.branch.gethistory()
+
+
+	view.editor.oninput = function(e) {
+		if(pointer != undefined) {
+			branchout()
+		}
+
+		var text = e.target.value
+		var last = view.editor.last
+		var i = 0, j = 0
+
+		var min = Math.min(last.length, text.length)
+
+		for(; i < min; i++) {
+			if(last[i] != text[i]) break; }
+
+		for(; min - j > i; j++) {
+			if(last[last.length-j-1] != text[text.length-j-1]) break; }
+
+		
+
+
+		var ls = last.slice(i, last.length -j)
+		var ts = text.slice(i, text.length -j)
+		var change = {
+			time: new Date().getTime(),
+			pos: i,
+			last: ls,
+			now: ts }
+
+		queue.push(change)
+		view.branch.present.push(change)
+
+		view.branch.render = view.editor.last = text
+	}
+
+	view.branchbtn.onclick = function() {
+		branchout()
+	}
+
+	view.graph.onclick = function() {
+		var lastbranch = view.branch
+		view.leave()
+		entergraphview(lastbranch)
+	}
+	
+	body.appendChild(view.editor)
+	body.appendChild(view.graph)
+	body.appendChild(view.branchbtn)
+
+	view.editor.focus()
+
+	view.leave = function() {
+		var list = [view.editor, view.branchbtn, view.graph]
+		for(var i in list)
+			body.removeChild(list[i])
+
+		view.slider.despawn()
+		view = undefined
+	}
+}
+
+
 var queue = [], intransfer = []
-
 var branches = []
 
 function branch(past) {
 	this.past = past
 	this.present = []
-	this.render = ''
 	this.time = new Date().getTime()
 
 	branches.push(this)
@@ -31,7 +167,7 @@ branch.prototype = {
 	},
 	gethistory: function() {
 		var past = this.getprecedinghistory()
-		return past.concat(this.present)
+		return new history(past.concat(this.present))
 	},
 	getprecedinghistory: function() {
 		var result = []
@@ -47,14 +183,12 @@ branch.prototype = {
 }
 
 
-var activebranch = new branch()	
-var pointer = undefined
 
 function branchout() {
 		var past = undefined;
-		var i = activebranch
+		var i = view.branch
 
-		if(pointer == undefined) pointer = activebranch.getlength()
+		if(pointer == undefined) pointer = view.branch.getlength()
 	
 		
 		while(true) {
@@ -70,43 +204,10 @@ function branchout() {
 			}
 		}
 		
-		activebranch = new branch(past)
-		activebranch.render = editor.value
-		pointer = undefined
-		historyslider.value = 10000
-}
-
-editor.oninput = function(e) {
-	if(pointer != undefined) {
-		branchout()
-	}
-
-	var text = e.target.value
-	var i = 0, j = 0
-
-	var min = Math.min(last.length, text.length)
-
-	for(; i < min; i++) {
-		if(last[i] != text[i]) break; }
-
-	for(; min - j > i; j++) {
-		if(last[last.length-j-1] != text[text.length-j-1]) break; }
-
-	
-
-
-	var ls = last.slice(i, last.length -j)
-	var ts = text.slice(i, text.length -j)
-	var change = {
-		time: new Date().getTime(),
-		pos: i,
-		last: ls,
-		now: ts }
-
-	queue.push(change)
-	activebranch.present.push(change)
-
-	activebranch.render = last = text
+		view.branch = new branch(past)
+		view.branch.render = editor.value
+		view.history = new history(view.branch)
+		view.slider.to(1)
 }
 
 var request = new XMLHttpRequest()
@@ -164,74 +265,72 @@ if(user == undefined) {
 	request.send(user.login + '\n' + user.password)
 }
 
-var branchbutton = document.getElementById('branchbutton')
-
-branchbutton.onclick = function() {
-	branchout()
-}
-
-
-var graphbutton = document.getElementById('graphbutton')
-var graph = document.getElementById('graph')
-
-graphbutton.onclick = function() {
-	var canvas = document.createElement('canvas')
+function entergraphview(lastbranch) {
+	view = {}
+	var canvas = view.canvas = document.createElement('canvas')
 	canvas.width = window.innerWidth
 	canvas.height = window.innerHeight
 
-	var g = new Graph(canvas, Math.floor(editor.clientWidth * 3/5), '20px serif normal')
 
-		var active = undefined
-		var lastmouse = undefined
+	view.leave = function() {
+		body.removeChild(canvas)
+	}
 
-		window.onmousedown = function(e) {
-			lastmouse = {
-				x: e.clientX, y: e.clientY } }
-				
-		window.onmousemove = function(e) {
-			if(lastmouse != undefined) {
-				g.x -= lastmouse.x - e.clientX
-				g.y -= lastmouse.y - e.clientY
+	var g = new Graph(canvas, Math.floor(window.clientWidth * 3/5), '20px serif normal')
 
-				lastmouse = { x: e.clientX, y: e.clientY }
-			}
+	var active = undefined
+	var lastmouse = undefined
 
-			for(var i in g.vertices) {
-				var v = g.vertices[i]
-				if(Math.abs(g.x + v.x - e.clientX) < v.size && 
-					Math.abs(g.y + v.y - e.clientY) < v.size) {
-					body.classList.add('clickable')
-					active = v
-					return;
-				}
-			}
+	window.onmousedown = function(e) {
+		lastmouse = {
+			x: e.clientX, y: e.clientY } }
+			
+	window.onmousemove = function(e) {
+		if(lastmouse != undefined) {
+			g.x -= lastmouse.x - e.clientX
+			g.y -= lastmouse.y - e.clientY
 
-			active = undefined
-			body.classList.remove('clickable')
+			lastmouse = { x: e.clientX, y: e.clientY }
 		}
 
-				 
-		window.onmouseup = function() {
-			lastmouse = undefined
-			if(active == undefined) return
+		for(var i in g.vertices) {
+			var v = g.vertices[i]
+			if(Math.abs(g.x + v.x - e.clientX) < v.size && 
+				Math.abs(g.y + v.y - e.clientY) < v.size) {
+				body.classList.add('clickable')
+				active = v
+				return;
+			}
+		}
 
-			window.onmouseup = undefined
-			window.onmousemove = undefined
-			window.onmousedown = undefined
+		active = undefined
+		body.classList.remove('clickable')
+	}
 
-			g.ending = {
-				time: new Date().getTime(),
-				vertex: active,
-				callback: function() {
+			 
+	window.onmouseup = function() {
+		lastmouse = undefined
+		if(active == undefined) return
 
-			activebranch = active.branch
-			last = editor.value = activebranch.render
-			pointer = undefined
-			historyslider.value = 10000
+		window.onmouseup = undefined
+		window.onmousemove = undefined
+		window.onmousedown = undefined
 
-			g.quit()
-			body.classList.remove('clickable')
-			body.removeChild(canvas)
+
+		g.ending = {
+			time: new Date().getTime(),
+			vertex: active,
+			callback: function() {
+
+				lastbranch = active.branch
+				pointer = undefined
+	
+				g.quit()
+				body.classList.remove('clickable')
+				view.leave()
+				entereditorview()
+
+				last = view.editor.value = lastbranch.render
 			}
 		}
 	}
@@ -248,7 +347,7 @@ graphbutton.onclick = function() {
 		
 		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
 
-		if(branches[i].time == activebranch.time)
+		if(branches[i].time == lastbranch.time)
 			g.active = v
 
 		v.branch = branches[i]	
@@ -265,51 +364,51 @@ graphbutton.onclick = function() {
 	g.go()
 }
 
-function historystep(change) {
-	editor.value = editor.value.substr(0, change.pos) +
-		change.now + editor.value.substr(change.pos + change.last.length,
-			editor.value.length)
+function history(steps) {
+	this.steps = steps
+	this.position = 0
+	this.render = ''
 }
+
+history.prototype = {
+	forward: function() {
+		if(this.position > this.steps.length - 1) return
+
+		var change = this.steps[this.position]
+		this.position++
+
+		this.render = this.render.substr(0, change.pos) +
+			change.now + this.render.substr(change.pos + change.last.length,
+				this.render.length)
+	},
 	
-function historystepback(change) {
-	editor.value = editor.value.substr(0, change.pos) +
-		change.last + editor.value.substr(change.pos + change.now.length,
-			editor.value.length)
-}
+	back: function() {
+		if(this.position <= 0) return;
 
-function historygo(go) {
-	if(pointer != go) {
+		var change = this.steps[this.position - 1]
+		this.position--;
 
-	var all = activebranch.gethistory()
+		this.render = this.render.substr(0, change.pos) +
+			change.last + this.render.substr(change.pos + change.now.length,
+				this.render.length)
+	},
 
-	while(pointer != go) {
-		if(pointer > go) {
-			historystepback(all[pointer-1])
-			pointer--;
-		}
-		else {
-			historystep(all[pointer])
-			pointer++;
-		}
-	}	
+	go: function(go) {
+		if(this.position == go) return;
+		if(go <= 0) go = 0
+		if(go > this.steps.length) go = this.steps.length
+
+
+		while(this.position != go)
+			if(this.position > go) this.back()
+			else this.forward()
 		
 	}
-
-	if(pointer == activebranch.getlength())
-		pointer = undefined
 }
 
-var historyslider = document.getElementById('historyslider')
 
-historyslider.oninput = function(e) {
-	var go = Math.floor(historyslider.value / 10000 * activebranch.getlength())
 
-	if(pointer == undefined) pointer = activebranch.getlength()
-	historygo(go)
-	last = editor.value
-}
-	
-
+entereditorview()
 }
 </script>
 <style type='text/css'>
@@ -360,20 +459,33 @@ canvas {
 .hidden {
 	display: none;
 }
-#historyslider {
+.slider-bar {
 	position: fixed;
 	bottom: 10px;
 	left: 20%;
 	width: 60%;
+	height: 4px;
+	background: lightblue;
+	cursor: hand;
+	-webkit-touch-callout: none;
+-webkit-user-select: none;
+-khtml-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+}
+.slider-bar div {
+	cursor: hand;
+	position: relative;
+	left: 0;
+	top: -6px;
+	height: 16px;
+	width: 16px;
+	border-radius: 100%;
+	background: blue;
 }
 </style>
 </head>
 <body>
-<textarea autocomplete="off" id="editor"></textarea>
-<div id="graphbutton">graph</div>
-<div id="branchbutton">branch</div>
-<input type="range" id="historyslider" min="0" max="10000" step="1" value="10000" />
-<svg class="hidden" xmlns="http://www.w3.org/2000/svg" id="graph"></svg>
-</div>
 </body>
 </html>
