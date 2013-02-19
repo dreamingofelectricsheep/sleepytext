@@ -46,8 +46,7 @@ slider.prototype = {
 		if(p < 0) p = 0
 		if(p > 1) p = 1
 
-		var offset = this.bar.offsetWidth * p - this.knob.offsetWidth / 2
-		this.knob.style.left = offset + 'px'
+		this.knob.style.left = 100 * p + '%'
 
 		this.position = p
 
@@ -480,6 +479,7 @@ canvas {
 user-select: none;
 }
 .slider-bar div {
+	margin-left: -8px;
 	cursor: hand;
 	position: relative;
 	left: 0;
