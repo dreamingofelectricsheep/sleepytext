@@ -59,13 +59,55 @@ slider.prototype = {
 	}
 }
 
+function history(steps) {
+	this.steps = steps
+	this.position = 0
+	this.render = ''
+}
 
-function entereditorview() {
+history.prototype = {
+	forward: function() {
+		if(this.position > this.steps.length - 1) return
+
+		var change = this.steps[this.position]
+		this.position++
+
+		this.render = this.render.substr(0, change.pos) +
+			change.now + this.render.substr(change.pos + change.last.length,
+				this.render.length)
+	},
+	
+	back: function() {
+		if(this.position <= 0) return;
+
+		var change = this.steps[this.position - 1]
+		this.position--;
+
+		this.render = this.render.substr(0, change.pos) +
+			change.last + this.render.substr(change.pos + change.now.length,
+				this.render.length)
+	},
+
+	go: function(go) {
+		if(this.position == go) return;
+		if(go <= 0) go = 0
+		if(go > this.steps.length) go = this.steps.length
+
+
+		while(this.position != go)
+			if(this.position > go) this.back()
+			else this.forward()
+		
+	}
+}
+
+
+
+function entereditorview(activebranch) {
 	view = {}
 	view.editor = document.createElement("textarea")
 	view.editor.setAttribute('autocomplete', 'off')
 	view.editor.setAttribute('id', 'editor')
-	view.editor.last = ''
 
 
 	view.graph = document.createElement('div')
@@ -77,18 +119,20 @@ function entereditorview() {
 	view.branchbtn.innerHTML = 'branch'
 
 	view.slider = new slider(body, function(p) {
-		var go = Math.floor(p * view.branch.getlength())
+		var go = Math.floor(p * view.history.steps.length)
 
 		view.history.go(go)
 		view.editor.last = view.editor.value = view.history.render
 	})
 
-	view.branch = new branch()
+	view.branch = activebranch == undefined ? new branch() : activebranch
 	view.history = view.branch.gethistory()
+
+	view.editor.last = view.editor.value = view.branch.render
 
 
 	view.editor.oninput = function(e) {
-		if(pointer != undefined) {
+		if(view.history.position != view.history.steps.length) {
 			branchout()
 		}
 
@@ -117,9 +161,38 @@ function entereditorview() {
 
 		queue.push(change)
 		view.branch.present.push(change)
+		view.history.steps.push(change)
+		view.history.position = view.history.steps.length
 
-		view.branch.render = view.editor.last = text
+		view.history.render = view.branch.render = view.editor.last = text
 	}
+	
+	function branchout() {
+		var past = undefined;
+		var i = view.branch
+
+		var pointer = view.history.position
+	
+		
+		while(true) {
+			if(i.past == undefined) {
+				past = { branch: i, at: pointer }
+				break;
+			}
+			if(i.past.at > pointer) {
+				i = i.past.branch
+			} else {
+				past = { branch: i, at: pointer }
+				break;
+			}
+		}
+		
+		view.branch = new branch(past)
+		view.branch.render = view.editor.value
+		view.history = new history(view.branch)
+		view.slider.to(1)
+	}
+
 
 	view.branchbtn.onclick = function() {
 		branchout()
@@ -155,6 +228,7 @@ function branch(past) {
 	this.past = past
 	this.present = []
 	this.time = new Date().getTime()
+	this.render = ''
 
 	branches.push(this)
 }
@@ -184,31 +258,6 @@ branch.prototype = {
 
 
 
-function branchout() {
-		var past = undefined;
-		var i = view.branch
-
-		if(pointer == undefined) pointer = view.branch.getlength()
-	
-		
-		while(true) {
-			if(i.past == undefined) {
-				past = { branch: i, at: pointer }
-				break;
-			}
-			if(i.past.at > pointer) {
-				i = i.past.branch
-			} else {
-				past = { branch: i, at: pointer }
-				break;
-			}
-		}
-		
-		view.branch = new branch(past)
-		view.branch.render = editor.value
-		view.history = new history(view.branch)
-		view.slider.to(1)
-}
 
 var request = new XMLHttpRequest()
 request.timeout = 5000
@@ -328,9 +377,8 @@ function entergraphview(lastbranch) {
 				g.quit()
 				body.classList.remove('clickable')
 				view.leave()
-				entereditorview()
+				entereditorview(lastbranch)
 
-				last = view.editor.value = lastbranch.render
 			}
 		}
 	}
@@ -363,49 +411,6 @@ function entergraphview(lastbranch) {
 	body.appendChild(canvas)
 	g.go()
 }
-
-function history(steps) {
-	this.steps = steps
-	this.position = 0
-	this.render = ''
-}
-
-history.prototype = {
-	forward: function() {
-		if(this.position > this.steps.length - 1) return
-
-		var change = this.steps[this.position]
-		this.position++
-
-		this.render = this.render.substr(0, change.pos) +
-			change.now + this.render.substr(change.pos + change.last.length,
-				this.render.length)
-	},
-	
-	back: function() {
-		if(this.position <= 0) return;
-
-		var change = this.steps[this.position - 1]
-		this.position--;
-
-		this.render = this.render.substr(0, change.pos) +
-			change.last + this.render.substr(change.pos + change.now.length,
-				this.render.length)
-	},
-
-	go: function(go) {
-		if(this.position == go) return;
-		if(go <= 0) go = 0
-		if(go > this.steps.length) go = this.steps.length
-
-
-		while(this.position != go)
-			if(this.position > go) this.back()
-			else this.forward()
-		
-	}
-}
-
 
 
 entereditorview()

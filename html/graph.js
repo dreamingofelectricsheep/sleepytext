@@ -157,7 +157,6 @@ Graph.prototype.updateLayout = function() {
 		for(var i = 0; i < 3;i++)
 			c[i] = Math.ceil(255 * q + c[i] * (1 - q))
 
-		console.log('rgb('+c[0]+','+c[1]+','+c[2]+')')
 		this.ctx.fillStyle = 'rgb('+c[0]+','+c[1]+','+c[2]+')'
 		this.ctx.fill();	
 
