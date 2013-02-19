@@ -160,8 +160,10 @@ Graph.prototype.updateLayout = function() {
 		this.ctx.fillStyle = 'rgb('+c[0]+','+c[1]+','+c[2]+')'
 		this.ctx.fill();	
 
-		if(d > 300) 
+		if(d > 300) {
+			this.quit()
 			this.ending.callback()
+		}
 
 	}
 

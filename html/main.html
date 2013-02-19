@@ -17,6 +17,9 @@ function slider(parent, onchange) {
 	var that = this
 
 	this.knob.onmousedown = this.bar.onmousedown = function(e) {
+		body.classList.add('unselectable')
+		body.classList.add('clickable')
+
 		var f = function(e) {
 			var offset = e.clientX - that.bar.offsetLeft 
 
@@ -28,6 +31,9 @@ function slider(parent, onchange) {
 
 		window.onmousemove = f 
 		window.onmouseup = function() {
+			body.classList.remove('unselectable')
+			body.classList.remove('clickable')
+	
 			window.onmousemove = undefined
 			window.onmouseup = undefined
 		}
@@ -42,7 +48,7 @@ function slider(parent, onchange) {
 }
 
 slider.prototype = {
-	to: function(p) {
+	to: function(p, logic) {
 		if(p < 0) p = 0
 		if(p > 1) p = 1
 
@@ -50,11 +56,46 @@ slider.prototype = {
 
 		this.position = p
 
-		if(this.onchange == undefined) return
+		if(this.onchange == undefined || logic == true) return
 		this.onchange(this.position)
 	},
 	despawn: function() {
 		this.parent.removeChild(this.bar)
+	}
+}
+
+var queue = [], intransfer = []
+var branches = []
+
+function branch(past) {
+	this.past = past
+	this.present = []
+	this.time = new Date().getTime()
+	this.render = ''
+
+	branches.push(this)
+}
+
+branch.prototype = {
+	getlength: function() {
+		var past = 0
+		if(this.past) past = this.past.at
+		return past + this.present.length 
+	},
+	gethistory: function() {
+		var past = this.getprecedinghistory()
+		return new history(past.concat(this.present))
+	},
+	getprecedinghistory: function() {
+		var result = []
+
+		if(this.past) {
+			result = this.past.branch.getprecedinghistory()
+			result = result.concat(this.past.branch.present.slice(0,
+				this.past.at - result.length))
+		}
+
+		return result
 	}
 }
 
@@ -127,7 +168,8 @@ function entereditorview(activebranch) {
 	view.branch = activebranch == undefined ? new branch() : activebranch
 	view.history = view.branch.gethistory()
 
-	view.editor.last = view.editor.value = view.branch.render
+	view.history.render = view.editor.last = view.editor.value = view.branch.render
+	view.history.position = view.history.steps.length
 
 
 	view.editor.oninput = function(e) {
@@ -187,9 +229,10 @@ function entereditorview(activebranch) {
 		}
 		
 		view.branch = new branch(past)
-		view.branch.render = view.editor.value
-		view.history = new history(view.branch)
-		view.slider.to(1)
+		view.history = view.branch.gethistory()
+		view.history.position = view.history.steps.length
+
+		view.slider.to(1, true)
 	}
 
 
@@ -220,43 +263,113 @@ function entereditorview(activebranch) {
 }
 
 
-var queue = [], intransfer = []
-var branches = []
 
-function branch(past) {
-	this.past = past
-	this.present = []
-	this.time = new Date().getTime()
-	this.render = ''
 
-	branches.push(this)
-}
 
-branch.prototype = {
-	getlength: function() {
-		var past = 0
-		if(this.past) past = this.past.at
-		return past + this.present.length 
-	},
-	gethistory: function() {
-		var past = this.getprecedinghistory()
-		return new history(past.concat(this.present))
-	},
-	getprecedinghistory: function() {
-		var result = []
+function entergraphview(lastbranch) {
+	view = {}
+	var canvas = view.canvas = document.createElement('canvas')
+	canvas.width = window.innerWidth
+	canvas.height = window.innerHeight
 
-		if(this.past) {
-			result = this.past.branch.getprecedinghistory()
-			result = result.concat(this.past.branch.present.slice(0,
-				this.past.at - result.length))
+
+	view.leave = function() {
+		// Setting these makes a bug in chrome dissapear.
+		// Otherwise there is a chance that the screen will not
+		// refresh properly
+		canvas.width = 0
+		canvas.height = 0
+		body.removeChild(canvas)
+	}
+
+	var g = new Graph(canvas, Math.floor(window.clientWidth * 3/5), '20px serif normal')
+
+	var active = undefined
+	var lastmouse = undefined
+
+	window.onmousedown = function(e) {
+		lastmouse = {
+			x: e.clientX, y: e.clientY } }
+			
+	window.onmousemove = function(e) {
+		if(lastmouse != undefined) {
+			g.x -= lastmouse.x - e.clientX
+			g.y -= lastmouse.y - e.clientY
+
+			lastmouse = { x: e.clientX, y: e.clientY }
 		}
 
-		return result
+		for(var i in g.vertices) {
+			var v = g.vertices[i]
+			if(Math.abs(g.x + v.x - e.clientX) < v.size && 
+				Math.abs(g.y + v.y - e.clientY) < v.size) {
+				body.classList.add('clickable')
+				active = v
+				return;
+			}
+		}
+
+		active = undefined
+		body.classList.remove('clickable')
 	}
+
+			 
+	window.onmouseup = function() {
+		lastmouse = undefined
+		if(active == undefined) return
+
+		window.onmouseup = undefined
+		window.onmousemove = undefined
+		window.onmousedown = undefined
+
+
+		g.ending = {
+			time: new Date().getTime(),
+			vertex: active,
+			callback: function() {
+
+				lastbranch = active.branch
+				pointer = undefined
+	
+				body.classList.remove('clickable')
+				view.leave()
+				entereditorview(lastbranch)
+
+			}
+		}
+	}
+	
+
+	for(var i = 0; i < branches.length; ++i) {
+		var color = undefined;
+		if(branches[i].past == undefined) color = '#1987D1'
+
+		var s = branches[i].present.length
+		if(s < 1) s = 1
+		s = 7 + Math.log(s) * 2
+
+		
+		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
+
+		if(branches[i].time == lastbranch.time)
+			g.active = v
+
+		v.branch = branches[i]	
+	}
+	
+
+	for(var i = 0; i < branches.length; ++i) {
+		if(branches[i].past)
+			g.createEdge(branches[i].past.branch.time, branches[i].time)	
+	}
+
+
+	body.appendChild(canvas)
+	g.go()
 }
 
 
-
+entereditorview()
 
 var request = new XMLHttpRequest()
 request.timeout = 5000
@@ -313,108 +426,7 @@ if(user == undefined) {
 	request.send(user.login + '\n' + user.password)
 }
 
-function entergraphview(lastbranch) {
-	view = {}
-	var canvas = view.canvas = document.createElement('canvas')
-	canvas.width = window.innerWidth
-	canvas.height = window.innerHeight
-
-
-	view.leave = function() {
-		body.removeChild(canvas)
-	}
-
-	var g = new Graph(canvas, Math.floor(window.clientWidth * 3/5), '20px serif normal')
-
-	var active = undefined
-	var lastmouse = undefined
-
-	window.onmousedown = function(e) {
-		lastmouse = {
-			x: e.clientX, y: e.clientY } }
-			
-	window.onmousemove = function(e) {
-		if(lastmouse != undefined) {
-			g.x -= lastmouse.x - e.clientX
-			g.y -= lastmouse.y - e.clientY
-
-			lastmouse = { x: e.clientX, y: e.clientY }
-		}
-
-		for(var i in g.vertices) {
-			var v = g.vertices[i]
-			if(Math.abs(g.x + v.x - e.clientX) < v.size && 
-				Math.abs(g.y + v.y - e.clientY) < v.size) {
-				body.classList.add('clickable')
-				active = v
-				return;
-			}
-		}
-
-		active = undefined
-		body.classList.remove('clickable')
-	}
-
-			 
-	window.onmouseup = function() {
-		lastmouse = undefined
-		if(active == undefined) return
-
-		window.onmouseup = undefined
-		window.onmousemove = undefined
-		window.onmousedown = undefined
-
-
-		g.ending = {
-			time: new Date().getTime(),
-			vertex: active,
-			callback: function() {
-
-				lastbranch = active.branch
-				pointer = undefined
-	
-				g.quit()
-				body.classList.remove('clickable')
-				view.leave()
-				entereditorview(lastbranch)
-
-			}
-		}
-	}
-	
-
-	for(var i = 0; i < branches.length; ++i) {
-		var color = undefined;
-		if(branches[i].past == undefined) color = '#1987D1'
-
-		var s = branches[i].present.length
-		if(s < 1) s = 1
-		s = 7 + Math.log(s) * 2
-
-		
-		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
-
-		if(branches[i].time == lastbranch.time)
-			g.active = v
-
-		v.branch = branches[i]	
-	}
-	
-
-	for(var i = 0; i < branches.length; ++i) {
-		if(branches[i].past)
-			g.createEdge(branches[i].past.branch.time, branches[i].time)	
-	}
-
-
-	body.appendChild(canvas)
-	g.go()
-}
-
-
-entereditorview()
-}
-</script>
+}</script>
 <style type='text/css'>
 body {
 	margin: 0;
@@ -422,6 +434,15 @@ body {
 
 .clickable {
 	cursor: pointer;
+}
+
+.unselectable, .slider-bar, #graphbutton, #branchbutton {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
 }
 
 #editor {
@@ -435,25 +456,23 @@ body {
 	resize: none;
 	border-radius: 5px;
 }
-#branchbutton {
-	color: #9B8CCF;
+#branchbutton, #graphbutton {
+	color: white;
 	cursor: pointer;
 	position: fixed;
 	font-family: sans-serif;
 	font-size: 14px;
-	right: 100px;
-	bottom: 10px;
+	bottom: 3px;
 	line-height: 24px;
+	background: blue;
+	border-radius: 3px;
+	padding: 1px 12px;
+}
+#branchbutton {
+	right: 50px;
 }
 #graphbutton {
-	color: #9B8CCF;
-	cursor: pointer;
-	position: fixed;
-	font-family: sans-serif;
-	font-size: 14px;
-	right: 200px;
-	bottom: 10px;
-	line-height: 24px;
+	right: 150px;
 }
 canvas {
 	position: fixed;
@@ -471,12 +490,6 @@ canvas {
 	height: 4px;
 	background: lightblue;
 	cursor: hand;
-	-webkit-touch-callout: none;
--webkit-user-select: none;
--khtml-user-select: none;
--moz-user-select: none;
--ms-user-select: none;
-user-select: none;
 }
 .slider-bar div {
 	margin-left: -8px;
