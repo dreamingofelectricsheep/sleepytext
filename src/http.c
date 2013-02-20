@@ -30,6 +30,7 @@ struct http_connection {
 	http_fn onclose;
 	bytes request;
 	int user;
+	int file;
 	struct in6_addr ip;
 	time_t last;
 	SSL * tls;
@@ -99,6 +100,7 @@ int setup_socket(uint16_t port, void *ondata, void *onclose)
 void http_onclose(struct http_connection *http)
 {
 	debug("Closing http connection: %d", http->socket);
+	debug("Last error: %s", strerror(errno));
 	bfree(&http->request);
 	close(http->socket);
 	SSL_free(http->tls);
@@ -142,6 +144,7 @@ void http_ondata(struct http_connection *http)
 
 
 		if (len == 0) {
+			ERR_print_errors_fp(stderr);
 			http->onclose(http);
 			return;
 		}
@@ -292,6 +295,7 @@ void httplistener_ondata(struct generic_epoll_object *data)
 	debug("Accepting a new connection: %d", accepted);
 	struct http_connection *c = malloc(sizeof(*c));
 	c->user = 0;
+	c->file = -1;
 	c->socket = accepted;
 	c->ondata = http_ondata;
 	c->onclose = http_onclose;

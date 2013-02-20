@@ -381,13 +381,16 @@ function encode_int32(n) {
 	var bytes = new Uint8Array(4)
 
 	for(var i = 0; i < 4; i++)
-		bytes[i] = (n >> (8*i)) % 256
+		bytes[3 - i] = (n >> (8*i)) % 256
 
 	return bytes
 }
 
 function transferencode(list) {
 	var pieces = []
+
+	pieces.push('b')
+	pieces.push(encode_int32(1337))
 
 	for(var i in list) {
 		var c = list[i]
@@ -401,7 +404,7 @@ function transferencode(list) {
 		for(var i in data) data[i] = encode_int32(data[i])
 
 
-		pieces = pieces.concat([type], utf8, data)
+		pieces = pieces.concat([type], data, utf8)
 	}
 
 	return new Blob(pieces)

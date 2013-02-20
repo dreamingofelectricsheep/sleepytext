@@ -10,13 +10,14 @@ Rework the html interface.
 	Interface for managing multiple files
 	Gracuful disconnection handling
 	Lock screen
+	An offline mode for userless editing
 
 Backend changes
 	DONE Split the server implementation from the logic
+	DONE Save things to files
 	Add support for sessions and logging in from multiple devices
 	dlopen and similar stuff to facilitate code hotloading
 	A console (web?)
-	Save things to files
 	Add http:// redirection to https://
 	Fix IO
 		Another thread for reading/writing?

@@ -35,170 +35,231 @@ sqlite3_stmt * selectdocument;
 int lastblob = 0;
 
 
+struct insert {
+	uint32_t pos;
+	uint32_t lastlen;
+	uint32_t newlen;
+};
+
 int http_ondata_callback(struct http_connection *http, struct http_request * request) {
-		if (request->type ==  http_get) {
-			if(bsame(request->addr, Bs("/")) == 0) {
-				int f = open("html/main.html", 0);
-				bytes page = balloc(1 << 20);
-				page.length = read(f, page.as_void, page.length);
+	if (request->type ==  http_get) {
+		if(bsame(request->addr, Bs("/")) == 0) {
+			int f = open("html/main.html", 0);
+			bytes page = balloc(1 << 20);
+			page.length = read(f, page.as_void, page.length);
 
-				bytes resp = balloc(4096);
-				resp.len = snprintf(resp.as_void, resp.len,
-					"HTTP/1.1 200 Ok\r\n"
-					"Content-Length: %zd\r\n\r\n", page.len);
+			bytes resp = balloc(4096);
+			resp.len = snprintf(resp.as_void, resp.len,
+				"HTTP/1.1 200 Ok\r\n"
+				"Content-Length: %zd\r\n\r\n", page.len);
 
-				tls_writeb2(http->tls, resp, page);
-				return http_complete;
-			}
-			if(bsame(request->addr, Bs("/graph.js")) == 0) {
-				int f = open("html/graph.js", 0);
-				bytes page = balloc(1 << 20);
-				page.length = read(f, page.as_void, page.length);
-
-				bytes resp = balloc(4096);
-				resp.len = snprintf(resp.as_void, resp.len,
-					"HTTP/1.1 200 Ok\r\n"
-					"Content-Length: %zd\r\n\r\n", page.len);
-
-				tls_writeb2(http->tls, resp, page);
-				return http_complete;
-			}
-			if(bsame(bslice(request->addr, 0, 8), Bs("/branch/")) == 0) {
-
-				int blobid = btoi(bslice(request->addr, 8, 0));
-
-				bytes path = balloc(256);
-				snprintf(path.as_void, path.len, "./branches/%d", blobid);
-				
-				int f = open(path.as_char, O_RDONLY);
-				bytes page = balloc(1 << 20);
-				page.length = read(f, page.as_void, page.length);
-
-				bytes resp = balloc(4096);
-				resp.len = snprintf(resp.as_void, resp.len,
-					"HTTP/1.1 200 Ok\r\n"
-					"Content-Length: %zd\r\n\r\n", page.len);
-
-				tls_writeb2(http->tls, resp, page);
-				return http_complete;
-			}
-			if(bsame(request->addr, Bs("/stop")) == 0) {
-				epoll_stop = 1;
-				return http_ok;
-			}
-
-			return http_not_found;
+			tls_writeb2(http->tls, resp, page);
+			return http_complete;
 		}
+		if(bsame(request->addr, Bs("/graph.js")) == 0) {
+			int f = open("html/graph.js", 0);
+			bytes page = balloc(1 << 20);
+			page.length = read(f, page.as_void, page.length);
 
-		if (request->type == http_post) {
+			bytes resp = balloc(4096);
+			resp.len = snprintf(resp.as_void, resp.len,
+				"HTTP/1.1 200 Ok\r\n"
+				"Content-Length: %zd\r\n\r\n", page.len);
 
-			if(bsame(request->addr, Bs("/login")) == 0) {
-				bfound f = bfind(request->payload, Bs("\n"));
+			tls_writeb2(http->tls, resp, page);
+			return http_complete;
+		}
+		if(bsame(bslice(request->addr, 0, 8), Bs("/branch/")) == 0) {
 
-				bytes user = f.before;
-				bytes password = f.after;
+			int blobid = btoi(bslice(request->addr, 8, 0));
 
-				sqlite3_reset(selectpassword);
-				sqlite3_bind_text(selectpassword, 1, user.as_void, user.len, 0);
+			bytes path = balloc(256);
+			snprintf(path.as_void, path.len, "./branches/%d", blobid);
+			
+			int f = open(path.as_char, O_RDONLY);
+			bytes page = balloc(1 << 20);
+			page.length = read(f, page.as_void, page.length);
 
-				if(sqlite3_step(selectpassword) != SQLITE_ROW) {
-					return http_bad_request;
-				}
+			bytes resp = balloc(4096);
+			resp.len = snprintf(resp.as_void, resp.len,
+				"HTTP/1.1 200 Ok\r\n"
+				"Content-Length: %zd\r\n\r\n", page.len);
 
-				bytes dbpassword = {
-					.len = sqlite3_column_bytes(selectpassword, 0),
-					.as_cvoid = sqlite3_column_blob(selectpassword, 0) };
-
-				uint64_t id = sqlite3_column_int64(selectpassword, 1);
-
-
-				if(bsame(password, dbpassword) == 0) {
-					http->user = id;
-
-					sqlite3_reset(updatelastseen);
-					sqlite3_step(updatelastseen);
-
-					return http_ok;
-				}
-				else {
-					return http_bad_request;
-				}
-			} 
-
-			if(bsame(request->addr, Bs("/user")) == 0) {
-				bfound f = bfind(request->payload, Bs("\n"));
-
-				bytes user = f.before;
-				bytes password = f.after;
-		
-				sqlite3_reset(insertuser);
-				sqlite3_bind_text(insertuser, 1, user.as_void, user.len, 0);
-				sqlite3_bind_blob(insertuser, 2, password.as_void, password.len, 0);
-
-				if(sqlite3_step(insertuser) != SQLITE_DONE) {
-					return http_bad_request;
-				}
-				else {
-					http->user = sqlite3_last_insert_rowid(db);
-					return http_ok;
-				}
-			}
-			if(bsame(request->addr, Bs("/lock")) == 0) {
-				if(http->user == 0) return http_bad_request;
-
-				sqlite3_reset(updatelock);
-				sqlite3_bind_int(updatelock, 1, http->user);
-				sqlite3_bind_int(updatelock, 2, http->socket);
-
-				if(sqlite3_step(updatelock) != SQLITE_DONE)
-					return http_bad_request;
-				else return http_ok;
-
-			}
-			if(bsame(request->addr, Bs("/branch")) == 0) {
-				sqlite3_reset(insertbranch);
-
-				if(http->user == 0) return http_bad_request;
-
-				sqlite3_bind_int(insertbranch, 1, http->user);				
-				sqlite3_bind_int(insertbranch, 2, 0);
-				
-				lastblob++;				
-				sqlite3_bind_int(insertbranch, 3, lastblob);				
-
-				bfound f = bfind(request->payload, Bs("\n"));
-				int parent = 0, pos = 0;
-
-				if(f.found.length != 0) {
-					parent = btoi(f.before);
-					pos = btoi(f.after);
-				}
-
-				sqlite3_bind_int(insertbranch, 4, parent);
-				sqlite3_bind_int(insertbranch, 5, pos);
-
-
-				if(sqlite3_step(insertbranch) != SQLITE_DONE)
-					return http_bad_request;
-				else {
-					bytes id = balloc(256);
-					bytes formatted = itob(id, sqlite3_last_insert_rowid(db));
-
-					bytes resp = balloc(1024);
-					resp.len = snprintf(resp.as_char, 1024, "HTTP/1.1 200 Ok\r\n"
-						"Content-Length: %zd\r\n\r\n", formatted.len);
-
-					tls_writeb2(http->tls, resp, formatted);
-					bfree(&id);
-					bfree(&resp);
-					return http_complete;
-				}
-			}
-				
+			tls_writeb2(http->tls, resp, page);
+			return http_complete;
+		}
+		if(bsame(request->addr, Bs("/stop")) == 0) {
+			epoll_stop = 1;
 			return http_ok;
 		}
 
+		return http_not_found;
+	}
+
+	if (request->type == http_post) {
+
+		if(bsame(request->addr, Bs("/login")) == 0) {
+			bfound f = bfind(request->payload, Bs("\n"));
+
+			bytes user = f.before;
+			bytes password = f.after;
+
+			sqlite3_reset(selectpassword);
+			sqlite3_bind_text(selectpassword, 1, user.as_void, user.len, 0);
+
+			if(sqlite3_step(selectpassword) != SQLITE_ROW) {
+				return http_bad_request;
+			}
+
+			bytes dbpassword = {
+				.len = sqlite3_column_bytes(selectpassword, 0),
+				.as_cvoid = sqlite3_column_blob(selectpassword, 0) };
+
+			uint64_t id = sqlite3_column_int64(selectpassword, 1);
+
+
+			if(bsame(password, dbpassword) == 0) {
+				http->user = id;
+
+				sqlite3_reset(updatelastseen);
+				sqlite3_step(updatelastseen);
+
+				return http_ok;
+			}
+			else {
+				return http_bad_request;
+			}
+		} 
+
+		if(bsame(request->addr, Bs("/user")) == 0) {
+			bfound f = bfind(request->payload, Bs("\n"));
+
+			bytes user = f.before;
+			bytes password = f.after;
+	
+			sqlite3_reset(insertuser);
+			sqlite3_bind_text(insertuser, 1, user.as_void, user.len, 0);
+			sqlite3_bind_blob(insertuser, 2, password.as_void, password.len, 0);
+
+			if(sqlite3_step(insertuser) != SQLITE_DONE) {
+				return http_bad_request;
+			}
+			else {
+				http->user = sqlite3_last_insert_rowid(db);
+				return http_ok;
+			}
+		}
+		if(bsame(request->addr, Bs("/lock")) == 0) {
+			if(http->user == 0) return http_bad_request;
+
+			sqlite3_reset(updatelock);
+			sqlite3_bind_int(updatelock, 1, http->user);
+			sqlite3_bind_int(updatelock, 2, http->socket);
+
+			if(sqlite3_step(updatelock) != SQLITE_DONE)
+				return http_bad_request;
+			else return http_ok;
+
+		}
+		if(bsame(request->addr, Bs("/branch")) == 0) {
+			sqlite3_reset(insertbranch);
+
+			if(http->user == 0) return http_bad_request;
+
+			sqlite3_bind_int(insertbranch, 1, http->user);				
+			sqlite3_bind_int(insertbranch, 2, 0);
+			
+			lastblob++;				
+			sqlite3_bind_int(insertbranch, 3, lastblob);				
+
+			bfound f = bfind(request->payload, Bs("\n"));
+			int parent = 0, pos = 0;
+
+			if(f.found.length != 0) {
+				parent = btoi(f.before);
+				pos = btoi(f.after);
+			}
+
+			sqlite3_bind_int(insertbranch, 4, parent);
+			sqlite3_bind_int(insertbranch, 5, pos);
+
+
+			if(sqlite3_step(insertbranch) != SQLITE_DONE)
+				return http_bad_request;
+			else {
+				bytes id = balloc(256);
+				bytes formatted = itob(id, sqlite3_last_insert_rowid(db));
+
+				bytes resp = balloc(1024);
+				resp.len = snprintf(resp.as_char, 1024, "HTTP/1.1 200 Ok\r\n"
+					"Content-Length: %zd\r\n\r\n", formatted.len);
+
+				tls_writeb2(http->tls, resp, formatted);
+				bfree(&id);
+				bfree(&resp);
+				return http_complete;
+			}
+		}
+		if(bsame(request->addr, Bs("/feed")) == 0) {
+			bytes p = request->payload;
+			bytes commit = { .len = 0, .as_void = p.as_void };
+			while(p.len > 0) {
+				if(p.as_char[0] == 'b') {
+					write(http->file, commit.as_void, commit.len);
+
+					if(http->file != -1) { close(http->file); http->file = -1; }
+					bytes bid = bslice(p, 1, 5);
+					if(bid.len != 4) { debug("Needs 4 bytes."); return http_bad_request; }
+	
+					uint32_t id = ntohl(*((uint32_t*)bid.as_void));
+
+					bytes path = balloc(256);
+					snprintf(path.as_void, path.len, "./branches/%d", id);
+					http->file = open(path.as_char, O_APPEND | O_CREAT | O_RDWR);
+					bfree(&path);
+
+					if(http->file == -1) { 
+						debug("Could not open a file: %s",strerror(errno));
+						return http_bad_request;
+					}
+
+					p = bslice(p, 5, 0);
+					commit = (bytes) { .len = 0, .as_void = p.as_void };
+				}
+				else if(p.as_char[0] == 'i') {
+					if(http->file == -1) { debug("No file."); return http_bad_request; }
+					if(p.len < 13) {
+						debug("Incomplete data structure.");
+						return http_bad_request;
+					}
+					
+					struct insert * i = (void *) (p.as_char + 1);
+					i->lastlen = ntohl(i->lastlen);
+					i->newlen = ntohl(i->newlen);
+
+					size_t len = 13 + i->lastlen + i->newlen;
+
+					if(p.len < len) {
+						debug("Change lies."); 
+						return http_bad_request;
+					}
+
+					commit.len += len;
+					p = bslice(p, len, 0);
+				}
+				else {
+					debug("Unknown opcode: %d", p.as_char[0]);
+					return http_bad_request;
+				}
+			}
+			write(http->file, commit.as_void, commit.len);
+			return http_ok;
+		}
+			
 		return http_ok;
+	}
+
+	return http_ok;
 
 }
 
