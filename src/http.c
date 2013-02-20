@@ -29,7 +29,6 @@ struct http_connection {
 	http_fn onclose;
 	bytes request;
 	int user;
-	int session;
 	struct in6_addr ip;
 	time_t last;
 	SSL * tls;
@@ -259,7 +258,6 @@ void httplistener_ondata(struct generic_epoll_object *data)
 	debug("Accepting a new connection: %d", accepted);
 	struct http_connection *c = malloc(sizeof(*c));
 	c->user = 0;
-	c->session = 0;
 	c->socket = accepted;
 	c->ondata = http_ondata;
 	c->onclose = http_onclose;

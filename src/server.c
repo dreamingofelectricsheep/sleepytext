@@ -26,6 +26,8 @@ sqlite3_stmt * updatepassword;
 sqlite3_stmt * updatelogin;
 sqlite3_stmt * updatelastseen;
 sqlite3_stmt * insertuser;
+sqlite3_stmt * selectlock;
+sqlite3_stmt * updatelock;
 
 sqlite3_stmt * insertbranch;
 sqlite3_stmt * selectdocument;
@@ -141,6 +143,57 @@ int http_ondata_callback(struct http_connection *http, struct http_request * req
 					return http_ok;
 				}
 			}
+			if(bsame(request->addr, Bs("/lock")) == 0) {
+				if(http->user == 0) return http_bad_request;
+
+				sqlite3_reset(updatelock);
+				sqlite3_bind_int(updatelock, 1, http->user);
+				sqlite3_bind_int(updatelock, 2, http->socket);
+
+				if(sqlite3_step(updatelock) != SQLITE_DONE)
+					return http_bad_request;
+				else return http_ok;
+
+			}
+			if(bsame(request->addr, Bs("/branch")) == 0) {
+				sqlite3_reset(insertbranch);
+
+				if(http->user == 0) return http_bad_request;
+
+				sqlite3_bind_int(insertbranch, 1, http->user);				
+				sqlite3_bind_int(insertbranch, 2, 0);
+				
+				lastblob++;				
+				sqlite3_bind_int(insertbranch, 3, lastblob);				
+
+				bfound f = bfind(request->payload, Bs("\n"));
+				int parent = 0, pos = 0;
+
+				if(f.found.length != 0) {
+					parent = btoi(f.before);
+					pos = btoi(f.after);
+				}
+
+				sqlite3_bind_int(insertbranch, 4, parent);
+				sqlite3_bind_int(insertbranch, 5, pos);
+
+
+				if(sqlite3_step(insertbranch) != SQLITE_DONE)
+					return http_bad_request;
+				else {
+					bytes id = balloc(256);
+					bytes formatted = itob(id, sqlite3_last_insert_rowid(db));
+
+					bytes resp = balloc(1024);
+					resp.len = snprintf(resp.as_char, 1024, "HTTP/1.1 200 Ok\r\n"
+						"Content-Length: %zd\r\n\r\n", formatted.len);
+
+					tls_writeb2(http->tls, resp, formatted);
+					bfree(&id);
+					bfree(&resp);
+					return http_complete;
+				}
+			}
 				
 			return http_ok;
 		}
@@ -195,8 +248,10 @@ int main(int argc, char **argv)
 		goto cleanup; }
 	
 	ps("select password, id from users where login = ?", selectpassword)
+	ps("select lock from users where id = ?", selectlock)
 	ps("update users set password = ? where id = ?", updatepassword)
 	ps("update users set login = ? where id = ?", updatelogin)
+	ps("update users set lock = ? where id = ?", updatelock)
 	ps("update users set lastseen = date('now') where id = ?", updatelastseen)
 	ps("insert into users(login, password, created, lastseen) "
 		"values(?, ?, datetime('now'), datetime('now'))", insertuser)

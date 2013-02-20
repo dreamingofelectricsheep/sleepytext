@@ -71,7 +71,7 @@ bytes bfromstr(const char *c_str)
 	return r;
 }
 
-bytes atob(bytes buf, int number)
+bytes itob(bytes buf, int number)
 {
 	if (number == 0) {
 		buf.as_char[0] = '0';
