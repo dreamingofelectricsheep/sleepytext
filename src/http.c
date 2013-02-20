@@ -18,6 +18,7 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/sha.h>
 
 struct http_connection;
 
@@ -39,7 +40,8 @@ enum http_result {
 	http_complete,
 	http_ok,
 	http_bad_request,
-	http_not_found
+	http_not_found,
+	http_forbidden
 };
 
 enum http_request_type {
@@ -67,6 +69,7 @@ int setup_socket(uint16_t port, void *ondata, void *onclose)
 
 	int r = true;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &r, sizeof(r));
+	setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &r, sizeof(r));
 
 	struct sockaddr_in6 def = {
 		AF_INET6,
@@ -230,6 +233,9 @@ bad_request:
 		http->onclose(http);
 		break;
 	
+	case http_forbidden:
+		tls_writeb(http->tls, Bs("HTTP/1.1 403 Forbidden\r\n"
+			"Content-Length: 0\r\n\r\n"));
 	case http_complete:
 		break;
 	default:
@@ -238,6 +244,34 @@ bad_request:
 	};
 	
 	bfree(&http->request);
+}
+
+bytes http_extract_param(bytes header, bytes field) {	
+	bfound f = bfind(header, field);
+	f = bfind(f.after, Bs("\r\n"));
+	return f.before;
+}
+
+int http_websocket_accept(struct http_connection *http, struct http_request * request) {
+	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
+
+	if(version != 13) return http_bad_request;
+
+	bytes key = http_extract_param(request->header, Bs("Sec-WebSocket-Key"));
+	bytes rfc6455 = Bs("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+
+	SHA_CTX sha;
+	SHA1_Init(&sha);
+
+	SHA1_Update(&sha, key.as_void, key.len);
+	SHA1_Update(&sha, rfc6455.as_void, rfc6455.len);
+
+	unsigned char digest[20];
+	SHA1_Final(digest, &sha);
+	
+
+
+	return http_complete;
 }
 
 void tls_ondata(struct http_connection *http) {
