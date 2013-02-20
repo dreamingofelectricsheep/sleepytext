@@ -1,0 +1,30 @@
+Rework the html interface.
+	DONE Change implementation to use views and create elements from js
+	DONE Write a custom slider
+	DONE Binary format for outgoing messages
+	DONE Deal with encoding and send actual utf8
+	Use window.location and history to preserve state
+	Show the preview of the document in the graphview
+	Make an interactive tutorial
+	Provide an interface to manage users
+	Interface for managing multiple files
+	Gracuful disconnection handling
+	Lock screen
+
+Backend changes
+	DONE Split the server implementation from the logic
+	Add support for sessions and logging in from multiple devices
+	dlopen and similar stuff to facilitate code hotloading
+	A console (web?)
+	Save things to files
+	Add http:// redirection to https://
+	Fix IO
+		Another thread for reading/writing?
+		Use asynchronous sockets
+	Test it! Needs to run a shitton of users at once.
+	Use websockets
+	Implement quotas
+	Use begin/commit every second instead of pausing at each write
+
+Buy a domain
+Receive and install a proper TLS certificate
