@@ -15,6 +15,7 @@ Rework the html interface.
 Backend changes
 	DONE Split the server implementation from the logic
 	DONE Save things to files
+	DONE Cleanup the request handler code
 	Add support for sessions and logging in from multiple devices
 	dlopen and similar stuff to facilitate code hotloading
 	A console (web?)
