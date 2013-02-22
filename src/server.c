@@ -353,13 +353,13 @@ int main(int argc, char **argv)
 	struct http_callback_pair pairs[] = {
 		qp(root, "/"),
 		qp(graph, "/graph"),
-		qp(newbranch, "/newbranch"),
-		qp(branch, "/branch/"),
-		qp(feed, "/feed"),
-		qp(lock, "/lock"),
-		qp(user, "/user"),
-		qp(login, "/login"),
-		qp(stop, "/stop")
+		qp(newbranch, "/api/0/newbranch"),
+		qp(branch, "/api/0/branch/"),
+		qp(feed, "/api/0/feed"),
+		qp(lock, "/api/0/lock"),
+		qp(user, "/api/0/user"),
+		qp(login, "/api/0/login"),
+		qp(stop, "/api/0/stop")
 
 	};
 

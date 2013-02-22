@@ -433,7 +433,7 @@ request.onreadystatechange = function() {
 			intransfer = queue
 			queue = []
 
-			request.open('POST', '/feed')
+			request.open('POST', '/api/0/feed')
 
 			request.send(transferencode(intransfer))
 			
@@ -447,7 +447,7 @@ request.onreadystatechange = function() {
 var user = localStorage.user
 
 if(user == undefined) {
-	request.open('POST', '/user')
+	request.open('POST', '/api/0/user')
 	user = {
 		login: Math.random() * 999999999999,
 		password: Math.random() * 99999999999
@@ -457,7 +457,7 @@ if(user == undefined) {
 	localStorage.user = JSON.stringify(user)
 } else {
 	user = JSON.parse(user)
-	request.open('POST', '/login')
+	request.open('POST', '/api/0/login')
 	
 	request.send(user.login + '\n' + user.password)
 }
