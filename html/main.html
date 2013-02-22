@@ -1,70 +1,4 @@
-<html>
-<head>
-<title>Sleepy Text</title>
-<script type="text/javascript" src="graph.js"></script>
-<script type="text/javascript">
-window.onload = function() {
-var body = document.getElementsByTagName('body')[0]
-
-var view;
-
-function slider(parent, onchange) {
-	this.parent = parent
-	this.bar = document.createElement('div')
-	this.bar.setAttribute('class', 'slider-bar')
-	this.knob = document.createElement('div')
-
-	var that = this
-
-	this.knob.onmousedown = this.bar.onmousedown = function(e) {
-		body.classList.add('unselectable')
-		body.classList.add('clickable')
-
-		var f = function(e) {
-			var offset = e.clientX - that.bar.offsetLeft 
-
-			var p = offset / that.bar.offsetWidth			
-			that.to(p)
-		}
-
-		f(e)
-
-		window.onmousemove = f 
-		window.onmouseup = function() {
-			body.classList.remove('unselectable')
-			body.classList.remove('clickable')
-	
-			window.onmousemove = undefined
-			window.onmouseup = undefined
-		}
-	}
-			
-	this.bar.appendChild(this.knob)
-	parent.appendChild(this.bar)
-
-	this.to(1)
-
-	this.onchange = onchange
-}
-
-slider.prototype = {
-	to: function(p, logic) {
-		if(p < 0) p = 0
-		if(p > 1) p = 1
-
-		this.knob.style.left = 100 * p + '%'
-
-		this.position = p
-
-		if(this.onchange == undefined || logic == true) return
-		this.onchange(this.position)
-	},
-	despawn: function() {
-		this.parent.removeChild(this.bar)
-	}
-}
-
-var queue = [], intransfer = []
+<html><head><title>Sleepy Text</title><script type="text/javascript">var queue = [], intransfer = []
 var branches = []
 
 function branch(past) {
@@ -97,52 +31,7 @@ branch.prototype = {
 
 		return result
 	}
-}
-
-function history(steps) {
-	this.steps = steps
-	this.position = 0
-	this.render = ''
-}
-
-history.prototype = {
-	forward: function() {
-		if(this.position > this.steps.length - 1) return
-
-		var change = this.steps[this.position]
-		this.position++
-
-		this.render = this.render.substr(0, change.pos) +
-			change.now + this.render.substr(change.pos + change.last.length,
-				this.render.length)
-	},
-	
-	back: function() {
-		if(this.position <= 0) return;
-
-		var change = this.steps[this.position - 1]
-		this.position--;
-
-		this.render = this.render.substr(0, change.pos) +
-			change.last + this.render.substr(change.pos + change.now.length,
-				this.render.length)
-	},
-
-	go: function(go) {
-		if(this.position == go) return;
-		if(go <= 0) go = 0
-		if(go > this.steps.length) go = this.steps.length
-
-
-		while(this.position != go)
-			if(this.position > go) this.back()
-			else this.forward()
-		
-	}
-}
-
-
-
+}</script><script type="text/javascript">
 function entereditorview(activebranch) {
 	view = {}
 	view.editor = document.createElement("textarea")
@@ -260,12 +149,189 @@ function entereditorview(activebranch) {
 		view.slider.despawn()
 		view = undefined
 	}
+}</script><script type="text/javascript">function Graph(canvas, textwidth, font) {
+	this.x = 0
+	this.y = 0
+	this.font = font
+	this.canvas = canvas
+	this.ctx = canvas.getContext('2d')
+	this.vertices = {};
+	this.edges = []
+	this.forcex = {};
+	this.forcey = {};
+	this.stepsize = 0.0005;
+	this.iteration = 0;
+	this.task = null;
+	this.textwidth = textwidth
+
+	// tunables to adjust the layout
+	this.repulsion = 200000; // repulsion constant, adjust for wider/narrower spacing
+	this.spring_length = 50; // base resting length of springs
 }
 
+Graph.prototype.createVertex = function(id, color, size, text) { 
+	if( color === undefined ) 
+		color = "#64B80B";
+
+	var vertex = {
+		color: color,
+		size: size,
+		edges: []
+	}
+
+	vertex.x = this.canvas.width / 2 * (Math.random() + 1) * 0.5
+	vertex.y = this.canvas.height / 2 * (Math.random() + 1) * 0.5
+
+	this.vertices[id] = vertex
+	return vertex
+}
+
+Graph.prototype.createEdge = function(a, b, color, size) {
+	if(color == undefined)
+		color = '#86D479'
+
+	if(size == undefined)
+		size = 5
+	
+	var line = {
+		color: color,
+		size: size,
+		a: this.vertices[a],
+		b: this.vertices[b]
+	}
+		
+	this.vertices[a].edges[b] = { "dest" : b, "line": line };
+	this.vertices[b].edges[a] = { "dest" : a, "line": line };
+
+	this.edges.push(line)
+}
+
+Graph.prototype.updateLayout = function() {
+	for (i in this.vertices) {
+		this.forcex[i] = 0;
+		this.forcey[i] = 0;
+		for (j in this.vertices) {
+			if( i !== j ) {
+				// using rectangle's center, bounding box would be better
+				var deltax = this.vertices[j].x - this.vertices[i].x;
+				var deltay = this.vertices[j].y - this.vertices[i].y;
+				var d2 = deltax * deltax + deltay * deltay;
+
+				// add some jitter if distance^2 is very small
+				if( d2 < 0.01 ) {
+	                deltax = 0.1 * Math.random() + 0.1;
+	                deltay = 0.1 * Math.random() + 0.1;
+					var d2 = deltax * deltax + deltay * deltay;
+                }
+
+				// Coulomb's law -- repulsion varies inversely with square of distance
+				this.forcex[i] -= (this.repulsion / d2) * deltax;
+				this.forcey[i] -= (this.repulsion / d2) * deltay;
+
+				// spring force along edges, follows Hooke's law
+				if( this.vertices[i].edges[j] ) {
+					var distance = Math.sqrt(d2);
+					this.forcex[i] += (distance - this.spring_length) * deltax;
+					this.forcey[i] += (distance - this.spring_length) * deltay;
+				}
+			}
+		}
+	}
+
+	for (i in this.vertices) {
+		// update rectangles
+		this.vertices[i].x += this.forcex[i] * this.stepsize;
+		this.vertices[i].y += this.forcey[i] * this.stepsize;
+		
+	}
+	this.ctx.fillStyle = 'white'
+	this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+	var ctx = this.ctx
+
+	for(var i in this.vertices) {
+		var v = this.vertices[i]
+	//	ctx.drawImage(v.image, 0, 0)
+	}
+
+	var pulse = (new Date().getTime() % 1000) / 1000
+	pulse -= 0.5
+	pulse *= 2 * Math.PI
+	pulse = (Math.sin(pulse) + 1) / 2
+
+		var v = this.active
+		this.ctx.beginPath();
+		this.ctx.arc(this.x + v.x, this.y + v.y, v.size + 7 + pulse * 3, 
+			0, 2 * Math.PI, false);
+		this.ctx.fillStyle = '#E0BC1B'
+		this.ctx.fill();	
 
 
+	for(var i in this.edges) {
+		var e = this.edges[i]
+		this.ctx.beginPath();
+		this.ctx.moveTo(this.x + e.a.x, this.y + e.a.y)
+		this.ctx.lineTo(this.x + e.b.x, this.y + e.b.y)
+		this.ctx.strokeStyle = e.color
+		this.ctx.lineWidth = e.size
+		this.ctx.stroke();	
+	}
+
+	for(var i in this.vertices) {
+		var v = this.vertices[i]
+		this.ctx.beginPath();
+		this.ctx.arc(this.x + v.x, this.y + v.y, v.size, 0, 2 * Math.PI, false);
+		this.ctx.fillStyle = v.color
+		this.ctx.fill();	
 
 
+	}
+
+	if(this.ending != undefined) {
+		var d = new Date().getTime() - this.ending.time
+
+		var v = this.ending.vertex
+		this.ctx.beginPath();
+		this.ctx.arc(this.x + v.x, this.y + v.y, 
+			v.size + d * d/ 100, 0, 2 * Math.PI, false);
+
+
+		function parse(s,p) {
+			return parseInt(s.substr(2*p+1,2),16) }
+
+		var c = [0,0,0]
+		var q = d / 300
+
+		for(var i = 0; i < 3;i++)
+			c[i] = parse(v.color,i)
+
+
+		for(var i = 0; i < 3;i++)
+			c[i] = Math.ceil(255 * q + c[i] * (1 - q))
+
+		this.ctx.fillStyle = 'rgb('+c[0]+','+c[1]+','+c[2]+')'
+		this.ctx.fill();	
+
+		if(d > 300) {
+			this.quit()
+			this.ending.callback()
+		}
+
+	}
+
+}
+Graph.prototype.go = function() {
+	// already running
+	if (this.task) {
+		return;
+	}
+	obj = this;
+	this.iteration = 0;
+	this.task = window.setInterval(function(){ obj.updateLayout(); }, 1000/60);
+}
+Graph.prototype.quit = function() {
+	window.clearInterval(this.task);
+	this.task = null;
+}</script><script type="text/javascript">
 function entergraphview(lastbranch) {
 	view = {}
 	var canvas = view.canvas = document.createElement('canvas')
@@ -366,12 +432,47 @@ function entergraphview(lastbranch) {
 
 	body.appendChild(canvas)
 	g.go()
+}</script><script type="text/javascript">function history(steps) {
+	this.steps = steps
+	this.position = 0
+	this.render = ''
 }
 
+history.prototype = {
+	forward: function() {
+		if(this.position > this.steps.length - 1) return
 
-entereditorview()
+		var change = this.steps[this.position]
+		this.position++
 
-var request = new XMLHttpRequest()
+		this.render = this.render.substr(0, change.pos) +
+			change.now + this.render.substr(change.pos + change.last.length,
+				this.render.length)
+	},
+	
+	back: function() {
+		if(this.position <= 0) return;
+
+		var change = this.steps[this.position - 1]
+		this.position--;
+
+		this.render = this.render.substr(0, change.pos) +
+			change.last + this.render.substr(change.pos + change.now.length,
+				this.render.length)
+	},
+
+	go: function(go) {
+		if(this.position == go) return;
+		if(go <= 0) go = 0
+		if(go > this.steps.length) go = this.steps.length
+
+
+		while(this.position != go)
+			if(this.position > go) this.back()
+			else this.forward()
+		
+	}
+}</script><script type="text/javascript">var request = new XMLHttpRequest()
 request.timeout = 5000
 request.ontimeout = function() {
 	alert("Timeout!")
@@ -460,11 +561,65 @@ if(user == undefined) {
 	request.open('POST', '/api/0/login')
 	
 	request.send(user.login + '\n' + user.password)
+}</script><script type="text/javascript">var body;
+window.onload = function() {
+	body = document.getElementsByTagName('body')[0]
+	entereditorview()
+}</script><script type="text/javascript">function slider(parent, onchange) {
+	this.parent = parent
+	this.bar = document.createElement('div')
+	this.bar.setAttribute('class', 'slider-bar')
+	this.knob = document.createElement('div')
+
+	var that = this
+
+	this.knob.onmousedown = this.bar.onmousedown = function(e) {
+		body.classList.add('unselectable')
+		body.classList.add('clickable')
+
+		var f = function(e) {
+			var offset = e.clientX - that.bar.offsetLeft 
+
+			var p = offset / that.bar.offsetWidth			
+			that.to(p)
+		}
+
+		f(e)
+
+		window.onmousemove = f 
+		window.onmouseup = function() {
+			body.classList.remove('unselectable')
+			body.classList.remove('clickable')
+	
+			window.onmousemove = undefined
+			window.onmouseup = undefined
+		}
+	}
+			
+	this.bar.appendChild(this.knob)
+	parent.appendChild(this.bar)
+
+	this.to(1)
+
+	this.onchange = onchange
 }
 
-}</script>
-<style type='text/css'>
-body {
+slider.prototype = {
+	to: function(p, logic) {
+		if(p < 0) p = 0
+		if(p > 1) p = 1
+
+		this.knob.style.left = 100 * p + '%'
+
+		this.position = p
+
+		if(this.onchange == undefined || logic == true) return
+		this.onchange(this.position)
+	},
+	despawn: function() {
+		this.parent.removeChild(this.bar)
+	}
+}</script><style type="text/css">body {
 	margin: 0;
 }
 
@@ -537,9 +692,4 @@ canvas {
 	width: 16px;
 	border-radius: 100%;
 	background: blue;
-}
-</style>
-</head>
-<body>
-</body>
-</html>
+}</style><body></body></html>

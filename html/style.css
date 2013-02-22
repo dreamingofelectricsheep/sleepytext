@@ -1,0 +1,75 @@
+body {
+	margin: 0;
+}
+
+.clickable {
+	cursor: pointer;
+}
+
+.unselectable, .slider-bar, #graphbutton, #branchbutton {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+#editor {
+	font: 20px serif normal;
+	background-image: none;
+	height: 100%;
+	width: 100%;
+	padding: 10px 20% 100px 20%;
+	border: none;
+	outline: none;
+	resize: none;
+	border-radius: 5px;
+}
+#branchbutton, #graphbutton {
+	color: white;
+	cursor: pointer;
+	position: fixed;
+	font-family: sans-serif;
+	font-size: 14px;
+	bottom: 3px;
+	line-height: 24px;
+	background: blue;
+	border-radius: 3px;
+	padding: 1px 12px;
+}
+#branchbutton {
+	right: 50px;
+}
+#graphbutton {
+	right: 150px;
+}
+canvas {
+	position: fixed;
+	left: 0;
+	top: 0;
+}
+.hidden {
+	display: none;
+}
+.slider-bar {
+	position: fixed;
+	bottom: 10px;
+	left: 20%;
+	width: 60%;
+	height: 4px;
+	background: lightblue;
+	cursor: hand;
+}
+.slider-bar div {
+	margin-left: -8px;
+	cursor: hand;
+	position: relative;
+	left: 0;
+	top: -6px;
+	height: 16px;
+	width: 16px;
+	border-radius: 100%;
+	background: blue;
+}
+
