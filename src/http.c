@@ -101,6 +101,7 @@ void http_onclose(struct http_connection *http)
 {
 	debug("Closing http connection: %d", http->socket);
 	debug("Last error: %s", strerror(errno));
+	ERR_print_errors_fp(stderr);
 	bfree(&http->request);
 	close(http->socket);
 	SSL_free(http->tls);

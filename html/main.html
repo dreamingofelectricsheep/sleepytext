@@ -34,18 +34,14 @@ branch.prototype = {
 }</script><script type="text/javascript">
 function entereditorview(activebranch) {
 	view = {}
-	view.editor = document.createElement("textarea")
-	view.editor.setAttribute('autocomplete', 'off')
-	view.editor.setAttribute('id', 'editor')
+	view.editor = tags.textarea({ 
+		autocomplete: 'off',
+		id: 'editor' })
 
 
-	view.graph = document.createElement('div')
-	view.graph.setAttribute('id', 'graphbutton')
-	view.graph.innerHTML = 'graph'
-
-	view.branchbtn = document.createElement('div')
-	view.branchbtn.setAttribute('id', 'branchbutton')
-	view.branchbtn.innerHTML = 'branch'
+	view.graph = tags.div({ id: 'graphbutton' }, 'graph')
+	view.branchbtn = tags.div({ id: 'branchbutton' }, 'branch')
+	view.userbtn = tags.div({ id: 'userbtn' }, 'account')
 
 	view.slider = new slider(body, function(p) {
 		var go = Math.floor(p * view.history.steps.length)
@@ -138,6 +134,7 @@ function entereditorview(activebranch) {
 	body.appendChild(view.editor)
 	body.appendChild(view.graph)
 	body.appendChild(view.branchbtn)
+	body.appendChild(view.userbtn)
 
 	view.editor.focus()
 
@@ -619,7 +616,34 @@ slider.prototype = {
 	despawn: function() {
 		this.parent.removeChild(this.bar)
 	}
-}</script><style type="text/css">body {
+}</script><script type="text/javascript">function tags(tag, options, children) {
+	var element = document.createElement(tag)
+
+	for(var i in options)
+		element.setAttribute(i, options[i])
+	
+	for(var i in children)
+		if(typeof children[i] == 'object')
+			element.appendChild(children[i])
+		else
+			element.innerHTML = children[i]
+	
+	return element
+}
+
+(function() {
+	for(var i in arguments)
+		(function(tag) { 
+			tags[tag] = function(options) { 
+				var children = Array.prototype.slice.call(arguments)
+
+				if(typeof options != undefined)
+					children = children.slice(1)
+
+				return tags(tag, options, children) 
+			} 
+		})(arguments[i])
+})('html', 'div', 'p', 'input', 'body', 'a', 'textarea')</script><style type="text/css">body {
 	margin: 0;
 }
 

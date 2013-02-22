@@ -1,18 +1,14 @@
 
 function entereditorview(activebranch) {
 	view = {}
-	view.editor = document.createElement("textarea")
-	view.editor.setAttribute('autocomplete', 'off')
-	view.editor.setAttribute('id', 'editor')
+	view.editor = tags.textarea({ 
+		autocomplete: 'off',
+		id: 'editor' })
 
 
-	view.graph = document.createElement('div')
-	view.graph.setAttribute('id', 'graphbutton')
-	view.graph.innerHTML = 'graph'
-
-	view.branchbtn = document.createElement('div')
-	view.branchbtn.setAttribute('id', 'branchbutton')
-	view.branchbtn.innerHTML = 'branch'
+	view.graph = tags.div({ id: 'graphbutton' }, 'graph')
+	view.branchbtn = tags.div({ id: 'branchbutton' }, 'branch')
+	view.userbtn = tags.div({ id: 'userbtn' }, 'account')
 
 	view.slider = new slider(body, function(p) {
 		var go = Math.floor(p * view.history.steps.length)
@@ -105,6 +101,7 @@ function entereditorview(activebranch) {
 	body.appendChild(view.editor)
 	body.appendChild(view.graph)
 	body.appendChild(view.branchbtn)
+	body.appendChild(view.userbtn)
 
 	view.editor.focus()
 
