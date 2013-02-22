@@ -92,6 +92,11 @@ function entereditorview(activebranch) {
 		branchout()
 	}
 
+	view.userbtn.onclick = function() {
+		view.leave()
+		enteraccountview()
+	}
+
 	view.graph.onclick = function() {
 		var lastbranch = view.branch
 		view.leave()
@@ -106,7 +111,7 @@ function entereditorview(activebranch) {
 	view.editor.focus()
 
 	view.leave = function() {
-		var list = [view.editor, view.branchbtn, view.graph]
+		var list = [view.editor, view.branchbtn, view.graph, view.userbtn]
 		for(var i in list)
 			body.removeChild(list[i])
 

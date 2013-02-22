@@ -1,4 +1,96 @@
-<html><head><title>Sleepy Text</title><script type="text/javascript">var queue = [], intransfer = []
+<html><head><title>Sleepy Text</title><script type="text/javascript">var user;
+
+function request(addr, data, success, failure) {
+	var req = new XMLHttpRequest()
+	req.open('POST', addr)
+	req.timeout = 5000
+	req.ontimeout = function() { alert('Timeout') }
+
+	req.onreadystatechange = function() {
+		if(req.readyState != 4) return
+		if(req.status != 200 && typeof failure != undefined) 
+			failure(req.status)
+		if(typeof success != undefined) success()
+	}
+	
+	req.send(data)
+}
+
+
+function makelogin(user, success, failure) {
+	request('/api/0/login', user.login + '\n' + user.password, success, failure)
+}
+
+
+function trytologin() {
+	if(localStorage.user != undefined) {	
+		var tryuser = JSON.parse(localStorage.user)
+		makelogin(tryuser, function() { user = tryuser }, 
+			function() { 
+				localStorage.removeItem('user')
+				alert("Could not log in!") })
+	}
+}
+
+
+function enternoaccountview() {
+	view = {
+		username: tags.input({ id: 'username', type: 'text', 
+			placeholder: 'john@example.com' }),
+		password: tags.input({ id: 'password', type: 'password',
+			placeholder: 'Type in a long password here!' }),
+		login: tags.div({ id: 'login', class: 'button' }, 'Log in'),
+		register: tags.div({ id: 'register', class: 'button' }, 'Register')
+	}
+
+	var dom = []
+	for(var i in view) dom.push(i)
+
+	for(var i in dom) body.appendChild(view[dom[i]])
+
+	view.leave = function() {
+		for(var i in dom)
+			body.removeChild(view[dom[i]])
+	}
+
+	view.register.onclick = function() {
+		var tryuser = {
+			login: view.username.value,
+			password: view.password.value
+		}
+
+		request('/api/0/user', tryuser.login + '\n' + tryuser.password,
+			function() {
+				user = tryuser
+				view.leave()
+				entereditorview()
+			}, function() {
+				alert('Could not create such user') })
+	}
+	
+	view.login.onclick = function() {
+		var tryuser = {
+			login: view.username.value,
+			password: view.password.value
+		}
+
+		makelogin(tryuser, function() {
+			user = tryuser
+			view.leave()
+			entereditorview()
+		}, function() { alert("Wrong login") })	
+	}
+	
+}
+
+function enteraccountview() {
+	view = {}
+
+	
+	enternoaccountview()
+
+
+}</script><script type="text/javascript">var queue = [], intransfer = []
 var branches = []
 
 function branch(past) {
@@ -125,6 +217,11 @@ function entereditorview(activebranch) {
 		branchout()
 	}
 
+	view.userbtn.onclick = function() {
+		view.leave()
+		enteraccountview()
+	}
+
 	view.graph.onclick = function() {
 		var lastbranch = view.branch
 		view.leave()
@@ -139,7 +236,7 @@ function entereditorview(activebranch) {
 	view.editor.focus()
 
 	view.leave = function() {
-		var list = [view.editor, view.branchbtn, view.graph]
+		var list = [view.editor, view.branchbtn, view.graph, view.userbtn]
 		for(var i in list)
 			body.removeChild(list[i])
 
@@ -469,11 +566,7 @@ history.prototype = {
 			else this.forward()
 		
 	}
-}</script><script type="text/javascript">var request = new XMLHttpRequest()
-request.timeout = 5000
-request.ontimeout = function() {
-	alert("Timeout!")
-}
+}</script><script type="text/javascript">
 
 function encode_int32(n) {
 	var bytes = new Uint8Array(4)
@@ -508,60 +601,45 @@ function transferencode(list) {
 	return new Blob(pieces)
 }
 
-request.onreadystatechange = function() {
-	if(request.readyState != 4) return
-	if(request.status != 200) {
-		alert("Login failed!")
-		return
-	}
-		
 
 
-	request.onreadystatechange = function() {
-		if(request.readyState != 4) return;
-		if(request.status == 200) {
-				intransfer = []
+function synch(req) {
+	if(typeof req == undefined || req == undefined) {
+		req = new XMLHttpRequest()
+		req.timeout = 5000
+		req.ontimeout = function() {
+			alert("Timeout!")
 		}
-		else alert("Transfer error, code: " + request.status)
+
+		req.onreadystatechange = function() {
+			if(req.readyState != 4) return;
+			if(req.status == 200) {
+					intransfer = []
+			}
+			else alert("Transfer error, code: " + req.status)
+		}
 	}
 	
-
-	function update() {
+	if(typeof user != undefined && user != undefined) {		
 		if(intransfer.length == 0 && queue.length > 0) {
 			intransfer = queue
 			queue = []
 
-			request.open('POST', '/api/0/feed')
+			req.open('POST', '/api/0/feed')
 
-			request.send(transferencode(intransfer))
+			req.send(transferencode(intransfer))
 			
 		}
 	}
 
-	setInterval(update, 1000)
+	setTimeout(function() { synch(req) }, 1000)
 
-}
-
-var user = localStorage.user
-
-if(user == undefined) {
-	request.open('POST', '/api/0/user')
-	user = {
-		login: Math.random() * 999999999999,
-		password: Math.random() * 99999999999
-	}
-
-	request.send(user.login + '\n' + user.password)
-	localStorage.user = JSON.stringify(user)
-} else {
-	user = JSON.parse(user)
-	request.open('POST', '/api/0/login')
-	
-	request.send(user.login + '\n' + user.password)
 }</script><script type="text/javascript">var body;
 window.onload = function() {
 	body = document.getElementsByTagName('body')[0]
 	entereditorview()
+	trytologin()
+	synch()
 }</script><script type="text/javascript">function slider(parent, onchange) {
 	this.parent = parent
 	this.bar = document.createElement('div')
@@ -645,6 +723,7 @@ slider.prototype = {
 		})(arguments[i])
 })('html', 'div', 'p', 'input', 'body', 'a', 'textarea')</script><style type="text/css">body {
 	margin: 0;
+	text-align: center;
 }
 
 .clickable {
@@ -661,6 +740,7 @@ slider.prototype = {
 }
 
 #editor {
+	text-align: left;
 	font: 20px serif normal;
 	background-image: none;
 	height: 100%;
@@ -671,7 +751,7 @@ slider.prototype = {
 	resize: none;
 	border-radius: 5px;
 }
-#branchbutton, #graphbutton {
+#branchbutton, #graphbutton, #userbtn, .button {
 	color: white;
 	cursor: pointer;
 	position: fixed;
@@ -683,11 +763,33 @@ slider.prototype = {
 	border-radius: 3px;
 	padding: 1px 12px;
 }
+#register, #login {
+	position: static;
+	margin: 20px;
+	display: inline-block;
+}
+
+#password, #username {
+	border: 1px solid gray;
+	box-shadow: 0 0 10px 2px silver;
+	display: block;
+	padding: 5px;
+	border-radius: 4px;
+	margin: 10px auto;
+}
+#username {
+	margin-top: 10%;
+}
+	
+
+#userbtn {
+	right: 10px;
+}
 #branchbutton {
-	right: 50px;
+	right: 90px;
 }
 #graphbutton {
-	right: 150px;
+	right: 160px;
 }
 canvas {
 	position: fixed;

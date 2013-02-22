@@ -1,8 +1,4 @@
-var request = new XMLHttpRequest()
-request.timeout = 5000
-request.ontimeout = function() {
-	alert("Timeout!")
-}
+
 
 function encode_int32(n) {
 	var bytes = new Uint8Array(4)
@@ -37,55 +33,37 @@ function transferencode(list) {
 	return new Blob(pieces)
 }
 
-request.onreadystatechange = function() {
-	if(request.readyState != 4) return
-	if(request.status != 200) {
-		alert("Login failed!")
-		return
-	}
-		
 
 
-	request.onreadystatechange = function() {
-		if(request.readyState != 4) return;
-		if(request.status == 200) {
-				intransfer = []
+function synch(req) {
+	if(typeof req == undefined || req == undefined) {
+		req = new XMLHttpRequest()
+		req.timeout = 5000
+		req.ontimeout = function() {
+			alert("Timeout!")
 		}
-		else alert("Transfer error, code: " + request.status)
+
+		req.onreadystatechange = function() {
+			if(req.readyState != 4) return;
+			if(req.status == 200) {
+					intransfer = []
+			}
+			else alert("Transfer error, code: " + req.status)
+		}
 	}
 	
-
-	function update() {
+	if(typeof user != undefined && user != undefined) {		
 		if(intransfer.length == 0 && queue.length > 0) {
 			intransfer = queue
 			queue = []
 
-			request.open('POST', '/api/0/feed')
+			req.open('POST', '/api/0/feed')
 
-			request.send(transferencode(intransfer))
+			req.send(transferencode(intransfer))
 			
 		}
 	}
 
-	setInterval(update, 1000)
+	setTimeout(function() { synch(req) }, 1000)
 
 }
-
-var user = localStorage.user
-
-if(user == undefined) {
-	request.open('POST', '/api/0/user')
-	user = {
-		login: Math.random() * 999999999999,
-		password: Math.random() * 99999999999
-	}
-
-	request.send(user.login + '\n' + user.password)
-	localStorage.user = JSON.stringify(user)
-} else {
-	user = JSON.parse(user)
-	request.open('POST', '/api/0/login')
-	
-	request.send(user.login + '\n' + user.password)
-}
-

@@ -1,5 +1,6 @@
 body {
 	margin: 0;
+	text-align: center;
 }
 
 .clickable {
@@ -16,6 +17,7 @@ body {
 }
 
 #editor {
+	text-align: left;
 	font: 20px serif normal;
 	background-image: none;
 	height: 100%;
@@ -26,7 +28,7 @@ body {
 	resize: none;
 	border-radius: 5px;
 }
-#branchbutton, #graphbutton {
+#branchbutton, #graphbutton, #userbtn, .button {
 	color: white;
 	cursor: pointer;
 	position: fixed;
@@ -38,11 +40,33 @@ body {
 	border-radius: 3px;
 	padding: 1px 12px;
 }
+#register, #login {
+	position: static;
+	margin: 20px;
+	display: inline-block;
+}
+
+#password, #username {
+	border: 1px solid gray;
+	box-shadow: 0 0 10px 2px silver;
+	display: block;
+	padding: 5px;
+	border-radius: 4px;
+	margin: 10px auto;
+}
+#username {
+	margin-top: 10%;
+}
+	
+
+#userbtn {
+	right: 10px;
+}
 #branchbutton {
-	right: 50px;
+	right: 90px;
 }
 #graphbutton {
-	right: 150px;
+	right: 160px;
 }
 canvas {
 	position: fixed;
