@@ -76,6 +76,13 @@ canvas {
 .hidden {
 	display: none;
 }
+.locked {
+	cursor: pointer;
+	background: silver;
+	text-align: center;
+	font-size: 5em;
+	margin-top: 10%;
+}
 .slider-bar {
 	position: fixed;
 	bottom: 10px;

@@ -3,20 +3,22 @@ Rework the html interface.
 	DONE Write a custom slider
 	DONE Binary format for outgoing messages
 	DONE Deal with encoding and send actual utf8
+	DONE Lock screen
+	DONE An offline mode for userless editing
+	DONE Provide an interface to manage users
 	Use window.location and history to preserve state
 	Show the preview of the document in the graphview
 	Make an interactive tutorial
-	Provide an interface to manage users
 	Interface for managing multiple files
 	Gracuful disconnection handling
-	Lock screen
-	An offline mode for userless editing
+	When editing the same place from two devices, make the changes branch
 
 Backend changes
 	DONE Split the server implementation from the logic
 	DONE Save things to files
 	DONE Cleanup the request handler code
-	Add support for sessions and logging in from multiple devices
+	DONE Add support for sessions and logging in from multiple devices
+	Make locking affect only branches, not the whole account
 	dlopen and similar stuff to facilitate code hotloading
 	A console (web?)
 	Add http:// redirection to https://

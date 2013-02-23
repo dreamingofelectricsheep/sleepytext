@@ -62,6 +62,7 @@ function enternoaccountview() {
 		request('/api/0/user', tryuser.login + '\n' + tryuser.password,
 			function() {
 				user = tryuser
+				localStorage.user = JSON.stringify(user)
 				view.leave()
 				entereditorview()
 			}, function() {
@@ -76,6 +77,7 @@ function enternoaccountview() {
 
 		makelogin(tryuser, function() {
 			user = tryuser
+			localStorage.user = JSON.stringify(user)
 			view.leave()
 			entereditorview()
 		}, function() { alert("Wrong login") })	

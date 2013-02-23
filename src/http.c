@@ -191,7 +191,7 @@ void http_ondata(struct http_connection *http)
 
 		int contentlen = btoi(f.before);
 
-		if (contentlen <= 0)
+		if (contentlen < 0)
 			goto bad_request;
 	
 		if (contentlen != request.payload.len) {

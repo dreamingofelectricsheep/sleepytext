@@ -86,27 +86,13 @@ http_callback_fun(root) {
 	return http_complete;
 }
 
-http_callback_fun(graph) {
-	int f = open("html/graph.js", 0);
-	bytes page = balloc(1 << 20);
-	page.length = read(f, page.as_void, page.length);
-
-	bytes resp = balloc(4096);
-	resp.len = snprintf(resp.as_void, resp.len,
-		"HTTP/1.1 200 Ok\r\n"
-		"Content-Length: %zd\r\n\r\n", page.len);
-
-	tls_writeb2(http->tls, resp, page);
-	return http_complete;
-}
-
 
 http_callback_fun(branch) {
 
-	int blobid = btoi(bslice(request->addr, 8, 0));
+	int blobid = btoi(bslice(request->addr, Bs("/api/0/branch/").len, 0));
 
 	bytes path = balloc(256);
-	snprintf(path.as_void, path.len, "./branches/%d", blobid);
+	snprintf(path.as_void, path.len, "branches/%d", blobid);
 	
 	int f = open(path.as_char, O_RDONLY);
 	bytes page = balloc(1 << 20);
@@ -124,6 +110,14 @@ http_callback_fun(branch) {
 http_callback_fun(stop) {
 	epoll_stop = 1;
 	return http_ok;
+}
+
+int update_lock(int user, int lock) {
+	sqlite3_reset(updatelock);
+	sqlite3_bind_int(updatelock, 1, lock);
+	sqlite3_bind_int(updatelock, 2, user);
+
+	return sqlite3_step(updatelock);
 }
 
 http_callback_fun(login) {
@@ -150,14 +144,21 @@ http_callback_fun(login) {
 		http->user = id;
 
 		sqlite3_reset(updatelastseen);
+		sqlite3_bind_int(updatelastseen, 1, http->user);
 		sqlite3_step(updatelastseen);
 
+		if(update_lock(http->user, http->socket) != SQLITE_DONE)
+			debug("Could not lock the user.");
+
+	
 		return http_ok;
 	}
 	else {
 		return http_bad_request;
 	}
 } 
+
+	
 
 http_callback_fun(user) {
 	bfound f = bfind(request->payload, Bs("\n"));
@@ -174,18 +175,16 @@ http_callback_fun(user) {
 	}
 	else {
 		http->user = sqlite3_last_insert_rowid(db);
+		update_lock(http->user, http->socket);
 		return http_ok;
 	}
 }
 
 http_callback_fun(lock) {
+	debug("Locking user: %d", http->user);
 	if(http->user == 0) return http_bad_request;
 
-	sqlite3_reset(updatelock);
-	sqlite3_bind_int(updatelock, 1, http->user);
-	sqlite3_bind_int(updatelock, 2, http->socket);
-
-	if(sqlite3_step(updatelock) != SQLITE_DONE)
+	if(update_lock(http->user, http->socket) != SQLITE_DONE)
 		return http_bad_request;
 	else return http_ok;
 
@@ -232,6 +231,17 @@ http_callback_fun(newbranch) {
 }
 
 http_callback_fun(feed) {
+	sqlite3_reset(selectlock);
+	sqlite3_bind_int(selectlock, 1, http->user);
+	if(sqlite3_step(selectlock) != SQLITE_ROW)
+		return http_bad_request;
+
+	int lock = sqlite3_column_int(selectlock, 0);
+	debug("Locked to %d, trying %d", lock, http->socket);
+	if(lock != http->socket)
+		return http_forbidden;
+
+
 	bytes p = request->payload;
 	bytes commit = { .len = 0, .as_void = p.as_void };
 	while(p.len > 0) {
@@ -338,7 +348,7 @@ int main(int argc, char **argv)
 	ps("update users set password = ? where id = ?", updatepassword)
 	ps("update users set login = ? where id = ?", updatelogin)
 	ps("update users set lock = ? where id = ?", updatelock)
-	ps("update users set lastseen = date('now') where id = ?", updatelastseen)
+	ps("update users set lastseen = datetime('now') where id = ?", updatelastseen)
 	ps("insert into users(login, password, created, lastseen) "
 		"values(?, ?, datetime('now'), datetime('now'))", insertuser)
 
@@ -352,7 +362,6 @@ int main(int argc, char **argv)
 
 	struct http_callback_pair pairs[] = {
 		qp(root, "/"),
-		qp(graph, "/graph"),
 		qp(newbranch, "/api/0/newbranch"),
 		qp(branch, "/api/0/branch/"),
 		qp(feed, "/api/0/feed"),
@@ -363,7 +372,7 @@ int main(int argc, char **argv)
 
 	};
 
-	callbacks_len = 9;
+	callbacks_len = 8;
 
 	callbacks = pairs;	
 

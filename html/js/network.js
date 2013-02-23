@@ -48,7 +48,17 @@ function synch(req) {
 			if(req.status == 200) {
 					intransfer = []
 			}
-			else alert("Transfer error, code: " + req.status)
+			else {
+				queue = intransfer.concat(queue)
+				intransfer = []
+
+				if(req.status == 403) {
+					// The resource is being worked on from another device.
+					view.leave()
+					enterlockedview()
+
+				} else alert("Transfer error, code: " + req.status)
+			}
 		}
 	}
 	

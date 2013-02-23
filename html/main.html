@@ -62,6 +62,7 @@ function enternoaccountview() {
 		request('/api/0/user', tryuser.login + '\n' + tryuser.password,
 			function() {
 				user = tryuser
+				localStorage.user = JSON.stringify(user)
 				view.leave()
 				entereditorview()
 			}, function() {
@@ -76,6 +77,7 @@ function enternoaccountview() {
 
 		makelogin(tryuser, function() {
 			user = tryuser
+			localStorage.user = JSON.stringify(user)
 			view.leave()
 			entereditorview()
 		}, function() { alert("Wrong login") })	
@@ -566,6 +568,23 @@ history.prototype = {
 			else this.forward()
 		
 	}
+}</script><script type="text/javascript">function enterlockedview() {
+	view = {}
+	body.classList.add('locked')
+	body.innerHTML = 'Locked!'
+
+	view.leave = function() {
+		body.innerHTML = ''
+		body.classList.remove('locked')
+		document.onmouseup = undefined
+	}
+
+	document.onmouseup = function() {
+		request('/api/0/lock', undefined, function() {
+			view.leave()
+			entereditorview()
+		}, function() { alert('Could not lock for some reason') })
+	}
 }</script><script type="text/javascript">
 
 function encode_int32(n) {
@@ -616,7 +635,17 @@ function synch(req) {
 			if(req.status == 200) {
 					intransfer = []
 			}
-			else alert("Transfer error, code: " + req.status)
+			else {
+				queue = intransfer.concat(queue)
+				intransfer = []
+
+				if(req.status == 403) {
+					// The resource is being worked on from another device.
+					view.leave()
+					enterlockedview()
+
+				} else alert("Transfer error, code: " + req.status)
+			}
 		}
 	}
 	
@@ -798,6 +827,13 @@ canvas {
 }
 .hidden {
 	display: none;
+}
+.locked {
+	cursor: pointer;
+	background: silver;
+	text-align: center;
+	font-size: 5em;
+	margin-top: 10%;
 }
 .slider-bar {
 	position: fixed;
