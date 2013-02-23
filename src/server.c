@@ -379,8 +379,8 @@ int main(int argc, char **argv)
 
 	http_init();
 		
-	int http = setup_socket(8080, httplistener_ondata,
-				httplistener_onclose);
+	int tls = setup_socket(8080, tls_listener_ondata,
+				tls_listener_onclose);
 
 	
 	epoll_listen();

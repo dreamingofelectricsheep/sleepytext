@@ -11,7 +11,7 @@ int epoll_add(int fd, void *data)
 	// Lever triggered mode - epoll events fire as long
 	// as there is data available for reading.
 	struct epoll_event e;
-	e.events = EPOLLIN;
+	e.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
 	e.data.ptr = data;
 
 	if (epoll_ctl(epoll, EPOLL_CTL_ADD, fd, &e) < 0) {
@@ -30,6 +30,7 @@ struct generic_epoll_object {
 	int fd;
 	epoll_fn ondata;
 	epoll_fn onclose;
+	void * auxilary;
 };
 
 
@@ -57,7 +58,10 @@ void epoll_listen() {
 			else if (events & EPOLLIN) {
 				object->ondata(object);
 			}
-			else if (events & EPOLLHUP) {
+			else if (events & EPOLLOUT) {
+				object->ondata(object);
+			}
+			else if (events & EPOLLHUP || events & EPOLLRDHUP) {
 				debug("Hangup received on socket %d", socket);
 				object->onclose(object);
 			}

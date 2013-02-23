@@ -20,57 +20,26 @@
 #include <openssl/err.h>
 #include <openssl/sha.h>
 
-struct http_connection;
-
-typedef void (*http_fn) (struct http_connection *);
-
-struct http_connection {
-	int socket;
-	http_fn ondata;
-	http_fn onclose;
-	bytes request;
-	int user;
-	int file;
-	struct in6_addr ip;
-	time_t last;
-	SSL * tls;
-};
-
-
 enum http_result {
-	http_complete,
 	http_ok,
 	http_bad_request,
 	http_not_found,
 	http_forbidden
 };
 
-enum http_request_type {
-	http_unknown,
-	http_get,
-	http_post,
-	http_put,
-	http_head
-};
-
 struct http_request {
 	bytes header;
 	bytes payload;
 	bytes addr;
-	int type;
 };
 	
-int http_ondata_callback(struct http_connection *http, struct http_request * request);
 
-SSL_CTX * tls = 0;
-
-int setup_socket(uint16_t port, void *ondata, void *onclose)
+int setup_socket(uint16_t port, void *ondata, void *onclose, void *auxilary)
 {
 	int sock = socket(AF_INET6, SOCK_STREAM, 0);
 
 	int r = true;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &r, sizeof(r));
-	setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &r, sizeof(r));
 
 	struct sockaddr_in6 def = {
 		AF_INET6,
@@ -90,6 +59,7 @@ int setup_socket(uint16_t port, void *ondata, void *onclose)
 	object->fd = sock;
 	object->ondata = ondata;
 	object->onclose = onclose;
+	object->auxilary = auxilary;
 
 	epoll_add(sock, object);
 
@@ -97,85 +67,141 @@ int setup_socket(uint16_t port, void *ondata, void *onclose)
 }
 
 
-void http_onclose(struct http_connection *http)
+
+
+
+
+
+struct tcp_connection {
+	int socket;
+	struct in6_addr ip;
+	time_t last;
+};
+
+int tcp_ondata(struct tcp_connection *tcp, bytes buffer, bytes * out)
 {
-	debug("Closing http connection: %d", http->socket);
-	debug("Last error: %s", strerror(errno));
-	ERR_print_errors_fp(stderr);
-	bfree(&http->request);
-	close(http->socket);
-	SSL_free(http->tls);
-	free(http);
-}
+	int len = recv(tcp->socket, buffer.as_void, buffer.len, 0);
 
-const size_t tls_frame_len = 16 * 1024;
-int tls_request_frames = 10;
+	debug("Received %d bytes of data from socket %d", len, tcp->socket);
 
+	if (len <= 0) {
+		if (len < 0)
+			debug("Error reading data from socket %d: %s", tcp->socket, strerror(errno));
 
-
-int tls_writeb(SSL * tls, bytes b) {
-	return SSL_write(tls, b.as_void, b.len);
-}
-
-int tls_writeb2(SSL * tls, bytes b, bytes b2) {
-	SSL_write(tls, b.as_void, b.len);
-	return SSL_write(tls, b2.as_void, b2.len);
-}
-
-void http_ondata(struct http_connection *http)
-{
-	http->last = epoll_time;
-	bool data_available = true;
-
-	while(data_available) {
-		// If all space is filled, we increase it by one page.
-		size_t space_available = http->request.len % tls_frame_len;
-		space_available = tls_frame_len- space_available;
-
-		if(space_available == tls_frame_len) {
-			http->request.as_void = realloc(http->request.as_void, 
-				http->request.len + tls_frame_len);
-			space_available = tls_frame_len;
-		}
-
-
-		int len = SSL_read(http->tls,
-			http->request.as_void + http->request.len,
-			space_available);
-
-
-		if (len == 0) {
-			ERR_print_errors_fp(stderr);
-			http->onclose(http);
-			return;
-		}
-
-		if (len < 0) {
-		//	if (len == EAGAIN || len == EWOULDBLOCK) {
-		//		data_available = false;
-		//	}
-		//	else {
-				
-				ERR_print_errors_fp(stderr);
-				http->onclose(http);
-				return;
-		//	}
-		}
+		return return -1; 
+	}
 	
-		http->request.len += len;
-		
-		if(len != tls_frame_len) {
-			data_available = false;
-		}
+	out->as_void = buffer.as_void;
+	out->len = len;
+}
+
+void tcp_onclose(struct tcp_connection *tcp)
+{
+	debug("Closing http connection: %d", tcp->socket);
+	close(tcp->socket);
+}
+
+void tcp_onsetup(int socket, struct tcp_connection * tcp) {
+	struct sockaddr_in6 addr;
+	socklen_t len = sizeof(addr);
+
+	int accepted = accept4(socket, (void*) &addr, &len, SOCK_NONBLOCK);
+
+	int r = true;
+	setsockopt(accepted, SOL_SOCKET, SO_KEEPALIVE, &r, sizeof(r));
+
+	debug("Accepting a new tcp connection: %d", accepted);
+	tcp->socket = accepted;
+	tcp->request.len = 0;
+	tcp->request.as_void = 0;
+	tcp->pagelen = 16 * 4096;
+	memcpy(&tcp->.ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
+}
+
+
+
+
+
+
+
+
+struct tls_connection {
+	SSL * tls;
+};
+
+int tls_ondata(struct tls_connection *tls, bytes buffer, bytes *out, bytes *writeout)
+{
+	BIO * read = SSL_get_rbio(tls->tls);
+	BIO * write = SSL_get_wbio(tls->tls);
+
+
+	BIO_write(read, buffer.as_void, buffer.len);
+
+	int len = SSL_pending(tls->tls);
+	
+	debug("%d bytes available in tls.", len);
+	if(len > 0) *out = balloc(len);
+
+	len = SSL_read(tls->tls, out->as_void, out->len);
+
+	if(len > out->len) debug("ERROR: too much data to read from TLS.");
+
+	if(len == 0) {
+		debug("Peer requested connection closure.");
+		return -1;
 	}
 
-	write(0, http->request.as_void, http->request.len);
+	if(len < 0) {
+		debug("Tls errors.");
+		ERR_print_errors_fp(stderr);
+		
+		return -1;
 
-	bfound f = bfind(http->request, Bs("\r\n\r\n"));
+
+	}
+
+	return 0;
+}
+
+void tls_onclose(struct tls_conncection *tls)
+{
+	SSL_free(tls->tls);
+}
+
+void tls_onsetup(SSL_CTX * ctx, struct tls_connection *tls)
+{
+	tls->tls = SSL_new(ctx);
+	BIO * rbio = BIO_new(BIO_s_mem()),
+		wbio = BIO_new(BIO_s_mem());
+
+	SSL_set_bio(tls->tls, BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
+	SSL_set_accept_state(tls->tls);
+}
+
+	
+	
+
+struct http_ondata_fn_result {
+	int error;
+	int code;
+	bytes payload; } http_ondata_callback(struct http_request * request);
+
+
+struct http_ondata_result {
+	bytes array[5];
+	size_t len;
+	int error;
+} http_ondata(bytes buffer)
+{
+	write(0, buffer->as_void, buffer.len);
+
+	bfound f = bfind(buffer, Bs("\r\n\r\n"));
 
 	if (f.found.len == 0) {
 		debug("Partial http header.");
-		return;
+
+		return (struct http_ondata_result) {
+			.len = 0, .error = 0 };
 	}
 
 	struct http_request request = {
@@ -191,63 +217,64 @@ void http_ondata(struct http_connection *http)
 
 		int contentlen = btoi(f.before);
 
-		if (contentlen < 0)
-			goto bad_request;
 	
 		if (contentlen != request.payload.len) {
 			debug("Partial body received. %lu out of %d bytes available.", 
 				request.payload.len, contentlen);
-			return;
+
+			return (struct http_ondata_result) {
+				.len = 0, .error = 0 };
 		}
 	}
 
-	if(bsame(bslice(request.header, 0, 3), Bs("GET")) == 0)
-		request.type = http_get;
-	else if(bsame(bslice(request.header, 0, 3), Bs("PUT")) == 0)
-		request.type = http_put;
-	else if(bsame(bslice(request.header, 0, 4), Bs("POST")) == 0)
-		request.type = http_post;
-	else if(bsame(bslice(request.header, 0, 4), Bs("HEAD")) == 0)
-		request.type = http_head;
-		
+	
 
 	f = bfind(request.header, Bs(" "));
 	f = bfind(f.after, Bs(" "));
 
 	request.addr = f.before;
 
-	int result = http_ondata_callback(http, &request);
+	struct http_ondata_fn_result fnresult = http_ondata_callback(&request);
+	if(fnresult.error) goto bad_request;
 
-	switch(result) {
+	struct http_ondata_result result = {
+		.len = 0,
+		.error = 0 }
+
+	switch(result.code) {
 	case http_not_found:
-not_found:
-		tls_writeb(http->tls, Bs("HTTP/1.1 404 Not found\r\n"
-			"Content-Length: 0\r\n\r\n"));
+		result.array[0] = Bs("HTTP/1.1 404 Not found\r\n"
+			"Content-Length: 0\r\n\r\n");
+		result.len = 1;
 		break;
 
 	case http_ok:
-		tls_writeb(http->tls, Bs("HTTP/1.1 200 Ok\r\n"
-			"Content-Length: 0\r\n\r\n"));
+		bytes r = balloc(256);
+		r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
+			"Content-Length: %zd\r\n\r\n", fnresult.payload.len);
+		
+		result.array[0] = r;
+		result.array[1] = fnresult.payload;
+			
+		result.len = 2;
 		break;
 
 	case http_bad_request:
-bad_request:
 		debug("Bad request");
-		tls_writeb(http->tls, Bs("HTTP/1.1 400 Bad Request\r\n\r\n"));
-		http->onclose(http);
+		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n\r\n");
+		result.len = 1;
 		break;
 	
 	case http_forbidden:
-		tls_writeb(http->tls, Bs("HTTP/1.1 403 Forbidden\r\n"
-			"Content-Length: 0\r\n\r\n"));
-	case http_complete:
-		break;
+		debug("Forbidden!");
+		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n\r\n");
+		result.len = 1;
 	default:
-		goto not_found;
+		result.error = -1;
 		break;
 	};
 	
-	bfree(&http->request);
+	return result;
 }
 
 bytes http_extract_param(bytes header, bytes field) {	
@@ -255,7 +282,7 @@ bytes http_extract_param(bytes header, bytes field) {
 	f = bfind(f.after, Bs("\r\n"));
 	return f.before;
 }
-
+/*
 int http_websocket_accept(struct http_connection *http, struct http_request * request) {
 	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
 
@@ -277,61 +304,90 @@ int http_websocket_accept(struct http_connection *http, struct http_request * re
 
 	return http_complete;
 }
+*/
 
-void tls_ondata(struct http_connection *http) {
-	debug("SSL_accept on %d", http->socket);
-	http->ondata = http_ondata;
+
+struct http_tls_connection;
+
+typedef void (*http_tls_fn)(struct http_tls_connection *);
+
+struct http_tls_connection {
+	int socket;
+	http_tls_fn ondata;
+	http_tls_fn onclose;
+	struct tcp_connection tcp;
+	struct tls_connection tls;
+	struct http_connection http;
+};
+
+void http_tls_ondata(struct http_tls_connection *http_tls) {
+	bytes buffer = balloc(4096);
+	int result = tcp_ondata(&http_tls->tcp, &buffer)
+
+	bytes write = balloc(4096);
+	result = tls_ondata(http_tls->tls, &buffer, &write)
+
+	if(write.len > 0)
+		send(http_tls->tcp.socket, write.as_void, write.len, 0);
+
 	
-				ERR_print_errors_fp(stderr);
-	debug("done accepting");
+	struct http_ondata_result final = http_ondata(buffer);
+
+	for(int i = 0; i < 
 }
 
-void httplistener_ondata(struct generic_epoll_object *data)
+void http_tls_onclose(struct http_tls_connection *http_tls) {
+	tcp_onclose(http_tls->tcp);
+	tls_onclose(http_tls->tls);
+	free(http_tls);
+}
+
+
+
+
+
+void tls_listener_ondata(struct generic_epoll_object *data)
 {
-	int socket = data->fd;
-	struct sockaddr_in6 addr;
-	socklen_t len = sizeof(addr);
-	int accepted = accept(socket, (void*) &addr, &len);
+	struct http_tls_connection * con = malloc(sizeof(*con));
+	tcp_onsetup(data->socket, &con->tcp);
+	tls_onsetup(data->auxilary, &con->tls);
 
-	debug("Accepting a new connection: %d", accepted);
-	struct http_connection *c = malloc(sizeof(*c));
-	c->user = 0;
-	c->file = -1;
-	c->socket = accepted;
-	c->ondata = http_ondata;
-	c->onclose = http_onclose;
-	c->request.len = 0;
-	c->request.as_void = 0;
-	memcpy(&c->ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
+	con->ondata = &http_tls_ondata;
+	con->onclose = &http_tls_onclose;
 
-	c->tls = SSL_new(tls);
-	SSL_set_fd(c->tls, c->socket);
-	SSL_set_accept_state(c->tls);
-
-	epoll_add(accepted, c);
+	epoll_add(con->tcp.socket, con);
 }
 
-void httplistener_onclose(struct generic_epoll_object *data)
+
+void tls_listener_onclose(struct generic_epoll_object *data)
 {
 	debug("Closing listener socket. %d", data->fd);
 	close(data->fd);
 	free(data);
 };
 
-void http_init() {
+
+
+struct http_server_internals {
+	SSL_CTX * tls_ctx;
+};
+
+struct http_server_internals * http_init() {
+	struct http_server_internals * server = malloc(*server);
+	
 	SSL_library_init();
 	ERR_load_crypto_strings();
 	SSL_load_error_strings();
-	tls = SSL_CTX_new(TLSv1_server_method());
-	if(SSL_CTX_use_certificate_file(tls, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+	server->tls_ctx = SSL_CTX_new(TLSv1_server_method());
+	if(SSL_CTX_use_certificate_file(server->tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
 		debug("Error loading the certificate.");
 	}
 
-	if(SSL_CTX_use_PrivateKey_file(tls, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+	if(SSL_CTX_use_PrivateKey_file(server->tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
 		debug("Could not load private key.");
 	}
 
-	if(SSL_CTX_set_cipher_list(tls, "DEFAULT") != 1) {
+	if(SSL_CTX_set_cipher_list(server->tls_ctx, "DEFAULT") != 1) {
 		debug("Adding ciphers failed.");
 	}
 
