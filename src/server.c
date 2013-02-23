@@ -18,7 +18,7 @@
 
 #include "sqlite3.h"
 
-#include "http.c"
+#include "http_server.c"
 
 sqlite3 * db;
 sqlite3_stmt * selectpassword;
