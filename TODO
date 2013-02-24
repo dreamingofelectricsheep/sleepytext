@@ -18,13 +18,15 @@ Backend changes
 	DONE Save things to files
 	DONE Cleanup the request handler code
 	DONE Add support for sessions and logging in from multiple devices
+	DONE Use asynchronous sockets for reading
+	DONE Split the server into more manageable chunks.
+	Add dynamic, live, machine readable api description
 	Make locking affect only branches, not the whole account
 	dlopen and similar stuff to facilitate code hotloading
 	A console (web?)
 	Add http:// redirection to https://
 	Fix IO
-		Another thread for reading/writing?
-		Use asynchronous sockets
+		Another thread for writing large files?
 	Test it! Needs to run a shitton of users at once.
 	Use websockets
 	Implement quotas
