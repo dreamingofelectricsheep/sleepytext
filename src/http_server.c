@@ -33,6 +33,26 @@ struct http_request {
 	bytes addr;
 };
 
+typedef struct http_ondata_fn_result (*handler)(struct http_request * request);
+
+struct http_callback_pair {
+	handler fun;
+	bytes addr;
+};
+
+
+struct http_server {
+	SSL_CTX * tls_ctx;
+	struct http_callback_pair callback[16];
+	size_t callbacks;
+};
+
+void http_server_add_callback(struct http_server * s, struct http_callback_pair p) 
+{
+	s->callback[s->callbacks] = p;
+	s->callbacks++;
+}
+
 #include "http.c"
 #include "tls.c"
 #include "tcp.c"
@@ -63,12 +83,49 @@ int setup_socket(uint16_t port, void *ondata, void *onclose, void *auxilary)
 	object->fd = sock;
 	object->ondata = ondata;
 	object->onclose = onclose;
-	object->auxilary = auxilary;
+	object->auxiliary = auxilary;
 
 	epoll_add(sock, object);
 
 	return sock;
 }
+
+
+
+
+
+
+
+struct http_ondata_fn_result http_server_callback_dispatch(struct http_server *s,
+	struct http_request * request) 
+{
+
+	for(int i = 0; i < s->callbacks; i++) {
+		if(bsame(request->addr, s->callback[i].addr) == 0)
+			return s->callback[i].fun(request);
+
+		if(s->callback[i].addr.len <= 1) continue;
+
+		bytes slice = bslice(request->addr, 0, s->callback[i].addr.len);
+
+		
+		if(bsame(slice, s->callback[i].addr) == 0)
+			return s->callback[i].fun(request);
+	}
+
+	return (struct http_ondata_fn_result) {
+		.error = 0,
+		.payload = (bytes) { 0, 0 },
+		.code = http_not_found };
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -85,7 +142,11 @@ struct http_tls_connection {
 	struct tcp_connection tcp;
 	struct tls_connection tls;
 	bytes buffer;
+	struct http_server * server;
 };
+
+
+
 
 void http_tls_onclose(struct http_tls_connection *http_tls) {
 	debug("Closing a connection...");
@@ -127,7 +188,13 @@ void http_tls_ondata(struct http_tls_connection *http_tls) {
 
 	if(buffer.len > 0) {
 		debug("Crunching HTTP.");
-		struct http_ondata_result final = http_ondata(http_tls->buffer);
+		struct http_request parsed = http_parse_request(http_tls->buffer);
+
+		struct http_ondata_fn_result res = 
+			http_server_callback_dispatch(http_tls->server, &parsed);
+
+		struct http_ondata_result final = http_assemble_response(res);
+
 
 		if(final.error < 0) goto error;
 
@@ -177,9 +244,10 @@ error:
 void tls_listener_ondata(struct generic_epoll_object *data)
 {
 	struct http_tls_connection * con = malloc(sizeof(*con));
+	con->server = data->auxiliary;
 	
 	tcp_onsetup(data->fd, &con->tcp);
-	tls_onsetup(data->auxilary, &con->tls);
+	tls_onsetup(con->server->tls_ctx, &con->tls);
 
 	con->ondata = &http_tls_ondata;
 	con->onclose = &http_tls_onclose;
@@ -205,30 +273,28 @@ void tls_listener_onclose(struct generic_epoll_object *data)
 
 
 
-struct http_server_internals {
-};
 
-struct http_server_internals * http_init() {
-	SSL_CTX * tls_ctx;
-	
+
+struct http_server * http_init() {
+	struct http_server * s = malloc(sizeof(*s));
+
 	SSL_library_init();
 	ERR_load_crypto_strings();
 	SSL_load_error_strings();
-	tls_ctx = SSL_CTX_new(TLSv1_server_method());
-	if(SSL_CTX_use_certificate_file(tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+	s->tls_ctx = SSL_CTX_new(TLSv1_server_method());
+	if(SSL_CTX_use_certificate_file(s->tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
 		debug("Error loading the certificate.");
 	}
 
-	if(SSL_CTX_use_PrivateKey_file(tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
+	if(SSL_CTX_use_PrivateKey_file(s->tls_ctx, "./cert.pem", SSL_FILETYPE_PEM) != 1) {
 		debug("Could not load private key.");
 	}
 
-	if(SSL_CTX_set_cipher_list(tls_ctx, "DEFAULT") != 1) {
+	if(SSL_CTX_set_cipher_list(s->tls_ctx, "DEFAULT") != 1) {
 		debug("Adding ciphers failed.");
 	}
 
-	return (void*) tls_ctx;
-	
+	return s;
 }
 
 		

@@ -30,7 +30,7 @@ struct generic_epoll_object {
 	int fd;
 	epoll_fn ondata;
 	epoll_fn onclose;
-	void * auxilary;
+	void * auxiliary;
 };
 
 

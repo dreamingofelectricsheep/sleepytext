@@ -11,7 +11,9 @@ struct http_ondata_result {
 	bytes array[5];
 	size_t len;
 	int error;
-} http_ondata(bytes buffer)
+};
+
+struct http_request http_parse_request(bytes buffer)
 {
 	write(0, buffer.as_void, buffer.len);
 
@@ -20,8 +22,7 @@ struct http_ondata_result {
 	if (f.found.len == 0) {
 		debug("Partial http header.");
 
-		return (struct http_ondata_result) {
-			.len = 0, .error = 0 };
+		return (struct http_request){};
 	}
 
 	struct http_request request = {
@@ -41,8 +42,7 @@ struct http_ondata_result {
 			debug("Partial body received. %lu out of %d bytes available.", 
 				request.payload.len, contentlen);
 
-			return (struct http_ondata_result) {
-				.len = 0, .error = 0 };
+			return (struct http_request){};
 		}
 	}
 
@@ -53,8 +53,13 @@ struct http_ondata_result {
 
 	request.addr = f.before;
 
-	struct http_ondata_fn_result fnresult = http_ondata_callback(&request);
+	return request;
+}
 
+
+
+struct http_ondata_result http_assemble_response(struct http_ondata_fn_result fnresult)
+{
 	struct http_ondata_result result = {
 		.len = 0,
 		.error = 0 };

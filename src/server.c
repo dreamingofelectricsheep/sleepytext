@@ -42,38 +42,7 @@ struct insert {
 };
 
 
-typedef struct http_ondata_fn_result (*handler)(struct http_request * request);
 
-
-
-struct http_callback_pair {
-	handler fun;
-	bytes addr;
-};
-
-struct http_callback_pair * callbacks;
-size_t callbacks_len = 0;
-
-struct http_ondata_fn_result http_ondata_callback(struct http_request * request) {
-
-	for(int i = 0; i < callbacks_len; i++) {
-		if(bsame(request->addr, callbacks[i].addr) == 0)
-			return callbacks[i].fun(request);
-
-		if(callbacks[i].addr.len <= 1) continue;
-
-		bytes slice = bslice(request->addr, 0, callbacks[i].addr.len);
-
-		
-		if(bsame(slice, callbacks[i].addr) == 0)
-			return callbacks[i].fun(request);
-	}
-
-	return (struct http_ondata_fn_result) {
-		.error = 0,
-		.payload = (bytes) { 0, 0 },
-		.code = http_not_found };
-}
 
 #define http_callback_fun(id) struct http_ondata_fn_result \
 	http_callback_ ## id(struct http_request * request)
@@ -371,9 +340,9 @@ int main(int argc, char **argv)
 		"values(?, ?, ?, ?, ?)", insertbranch);
 	ps("select id, blobid, parentid, pos from branches where "
 		"docid = ?", selectdocument);
+
 #define qp(fun, path) (struct http_callback_pair) { http_callback_ ## fun, \
-	Bs(path) }
-	
+	Bs(path) }	
 
 	struct http_callback_pair pairs[] = {
 		qp(root, "/"),
@@ -383,15 +352,18 @@ int main(int argc, char **argv)
 		qp(lock, "/api/0/lock"),
 		qp(user, "/api/0/user"),
 		qp(login, "/api/0/login"),
+		qp(login, "")
 
 	};
 
-	callbacks_len = 7;
 
-	callbacks = pairs;	
+	struct http_server * http = http_init();
 
-
-	struct http_server_internals * http = http_init();
+	int i = 0;
+	while(pairs[i].addr.len > 0) {
+		http_server_add_callback(http, pairs[i]);
+		i++;
+	}
 		
 	int tls = setup_socket(8080, tls_listener_ondata,
 				tls_listener_onclose, http);
