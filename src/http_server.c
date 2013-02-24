@@ -20,6 +20,7 @@
 #include <openssl/err.h>
 #include <openssl/sha.h>
 
+
 enum http_result {
 	http_ok,
 	http_bad_request,
