@@ -6,7 +6,7 @@ sqlite3_flags=-DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION
 
 objs=server.o sqlite3.o
 server: $(objs)
-	$(cc) $(flags) -lrt -lssl -lcrypto -o $@ $(patsubst %,bin/%,$(objs))
+	$(cc) $(flags) -lrt -lssl -lcrypto -o bin/$@ $(patsubst %,bin/%,$(objs))
 
 -include $(patsubst %.o,bin/%.d,$(objs))
 
