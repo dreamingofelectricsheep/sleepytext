@@ -11,7 +11,7 @@ int epoll_add(int fd, void *data)
 	// Lever triggered mode - epoll events fire as long
 	// as there is data available for reading.
 	struct epoll_event e;
-	e.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP;
+	e.events = EPOLLIN | EPOLLRDHUP;
 	e.data.ptr = data;
 
 	if (epoll_ctl(epoll, EPOLL_CTL_ADD, fd, &e) < 0) {
@@ -56,9 +56,6 @@ void epoll_listen() {
 				object->onclose(object);
 			}
 			else if (events & EPOLLIN) {
-				object->ondata(object);
-			}
-			else if (events & EPOLLOUT) {
 				object->ondata(object);
 			}
 			else if (events & EPOLLHUP || events & EPOLLRDHUP) {

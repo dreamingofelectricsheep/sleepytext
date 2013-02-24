@@ -5,9 +5,9 @@ struct tcp_connection {
 	time_t last;
 };
 
-int tcp_ondata(struct tcp_connection *tcp, bytes buffer, bytes * out)
+int tcp_ondata(struct tcp_connection *tcp, bytes * buffer)
 {
-	int len = recv(tcp->socket, buffer.as_void, buffer.len, 0);
+	int len = recv(tcp->socket, buffer->as_void, buffer->len, 0);
 
 	debug("Received %d bytes of data from socket %d", len, tcp->socket);
 
@@ -15,11 +15,11 @@ int tcp_ondata(struct tcp_connection *tcp, bytes buffer, bytes * out)
 		if (len < 0)
 			debug("Error reading data from socket %d: %s", tcp->socket, strerror(errno));
 
-		return return -1; 
+		return -1; 
 	}
 	
-	out->as_void = buffer.as_void;
-	out->len = len;
+	buffer->len = len;
+	return 0;
 }
 
 void tcp_onclose(struct tcp_connection *tcp)
@@ -32,17 +32,14 @@ void tcp_onsetup(int socket, struct tcp_connection * tcp) {
 	struct sockaddr_in6 addr;
 	socklen_t len = sizeof(addr);
 
-	int accepted = accept4(socket, (void*) &addr, &len, SOCK_NONBLOCK);
+	int accepted = accept(socket, (void*) &addr, &len);
 
 	int r = true;
 	setsockopt(accepted, SOL_SOCKET, SO_KEEPALIVE, &r, sizeof(r));
 
 	debug("Accepting a new tcp connection: %d", accepted);
 	tcp->socket = accepted;
-	tcp->request.len = 0;
-	tcp->request.as_void = 0;
-	tcp->pagelen = 16 * 4096;
-	memcpy(&tcp->.ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
+	memcpy(&tcp->ip, &addr.sin6_addr, sizeof(addr.sin6_addr));
 }
 
 

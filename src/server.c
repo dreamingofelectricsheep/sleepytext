@@ -41,21 +41,24 @@ struct insert {
 	uint32_t newlen;
 };
 
-typedef int (*http_handler_callback)(struct http_connection *http, struct http_request
-	*request);
+
+typedef struct http_ondata_fn_result (*handler)(struct http_request * request);
+
+
 
 struct http_callback_pair {
-	http_handler_callback fun;
+	handler fun;
 	bytes addr;
 };
 
 struct http_callback_pair * callbacks;
 size_t callbacks_len = 0;
 
-int http_ondata_callback(struct http_connection *http, struct http_request * request) {
+struct http_ondata_fn_result http_ondata_callback(struct http_request * request) {
+
 	for(int i = 0; i < callbacks_len; i++) {
 		if(bsame(request->addr, callbacks[i].addr) == 0)
-			return callbacks[i].fun(http, request);
+			return callbacks[i].fun(request);
 
 		if(callbacks[i].addr.len <= 1) continue;
 
@@ -63,27 +66,29 @@ int http_ondata_callback(struct http_connection *http, struct http_request * req
 
 		
 		if(bsame(slice, callbacks[i].addr) == 0)
-			return callbacks[i].fun(http, request);
+			return callbacks[i].fun(request);
 	}
 
-	return http_not_found;
+	return (struct http_ondata_fn_result) {
+		.error = 0,
+		.payload = (bytes) { 0, 0 },
+		.code = http_not_found };
 }
 
-#define http_callback_fun(id) int http_callback_ ## id(struct http_connection *http, \
-	struct http_request * request)
+#define http_callback_fun(id) struct http_ondata_fn_result \
+	http_callback_ ## id(struct http_request * request)
 
 http_callback_fun(root) {
 	int f = open("html/main.html", 0);
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	bytes resp = balloc(4096);
-	resp.len = snprintf(resp.as_void, resp.len,
-		"HTTP/1.1 200 Ok\r\n"
-		"Content-Length: %zd\r\n\r\n", page.len);
+	struct http_ondata_fn_result result = {
+		.error = 0,
+		.code = http_ok,
+		.payload = page };
 
-	tls_writeb2(http->tls, resp, page);
-	return http_complete;
+	return result;
 }
 
 
@@ -98,19 +103,15 @@ http_callback_fun(branch) {
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	bytes resp = balloc(4096);
-	resp.len = snprintf(resp.as_void, resp.len,
-		"HTTP/1.1 200 Ok\r\n"
-		"Content-Length: %zd\r\n\r\n", page.len);
 
-	tls_writeb2(http->tls, resp, page);
-	return http_complete;
+	struct http_ondata_fn_result result = {
+		.error = 0,
+		.code = http_ok,
+		.payload = page };
+
+	return result;
 }
 
-http_callback_fun(stop) {
-	epoll_stop = 1;
-	return http_ok;
-}
 
 int update_lock(int user, int lock) {
 	sqlite3_reset(updatelock);
@@ -118,6 +119,15 @@ int update_lock(int user, int lock) {
 	sqlite3_bind_int(updatelock, 2, user);
 
 	return sqlite3_step(updatelock);
+}
+
+
+
+struct http_ondata_fn_result http_quick_result(int code) {
+	return (struct http_ondata_fn_result) {
+		.error = 0,
+		.code = code,
+		.payload = (bytes) { 0, 0 } };
 }
 
 http_callback_fun(login) {
@@ -130,7 +140,7 @@ http_callback_fun(login) {
 	sqlite3_bind_text(selectpassword, 1, user.as_void, user.len, 0);
 
 	if(sqlite3_step(selectpassword) != SQLITE_ROW) {
-		return http_bad_request;
+		return http_quick_result(http_bad_request);
 	}
 
 	bytes dbpassword = {
@@ -141,20 +151,21 @@ http_callback_fun(login) {
 
 
 	if(bsame(password, dbpassword) == 0) {
-		http->user = id;
+		//http->user = id;
 
 		sqlite3_reset(updatelastseen);
-		sqlite3_bind_int(updatelastseen, 1, http->user);
+		sqlite3_bind_int(updatelastseen, 1, id);
 		sqlite3_step(updatelastseen);
+		int socket = 0;
 
-		if(update_lock(http->user, http->socket) != SQLITE_DONE)
+		if(update_lock(id, socket) != SQLITE_DONE)
 			debug("Could not lock the user.");
 
 	
-		return http_ok;
+		return http_quick_result(http_ok);
 	}
 	else {
-		return http_bad_request;
+		return http_quick_result(http_bad_request);
 	}
 } 
 
@@ -171,31 +182,35 @@ http_callback_fun(user) {
 	sqlite3_bind_blob(insertuser, 2, password.as_void, password.len, 0);
 
 	if(sqlite3_step(insertuser) != SQLITE_DONE) {
-		return http_bad_request;
+		return http_quick_result(http_bad_request);
 	}
 	else {
-		http->user = sqlite3_last_insert_rowid(db);
-		update_lock(http->user, http->socket);
-		return http_ok;
+		int user = sqlite3_last_insert_rowid(db);
+		int socket = 0;
+		update_lock(user, socket);
+		return http_quick_result(http_ok);
 	}
 }
 
 http_callback_fun(lock) {
-	debug("Locking user: %d", http->user);
-	if(http->user == 0) return http_bad_request;
+	int user = 1;
+	debug("Locking user: %d", user);
+	if(user == 0) return http_quick_result(http_bad_request);
 
-	if(update_lock(http->user, http->socket) != SQLITE_DONE)
-		return http_bad_request;
-	else return http_ok;
+	int socket = 0;
+	if(update_lock(user, socket) != SQLITE_DONE)
+		return http_quick_result(http_bad_request);
+	else return http_quick_result(http_ok);
 
 }
 
 http_callback_fun(newbranch) {
 	sqlite3_reset(insertbranch);
 
-	if(http->user == 0) return http_bad_request;
+	int user = 1;
+	if(user == 0) return http_quick_result(http_bad_request);
 
-	sqlite3_bind_int(insertbranch, 1, http->user);				
+	sqlite3_bind_int(insertbranch, 1, user);				
 	sqlite3_bind_int(insertbranch, 2, 0);
 	
 	lastblob++;				
@@ -214,34 +229,34 @@ http_callback_fun(newbranch) {
 
 
 	if(sqlite3_step(insertbranch) != SQLITE_DONE)
-		return http_bad_request;
+		return http_quick_result(http_bad_request);
 	else {
 		bytes id = balloc(256);
 		bytes formatted = itob(id, sqlite3_last_insert_rowid(db));
 
-		bytes resp = balloc(1024);
-		resp.len = snprintf(resp.as_char, 1024, "HTTP/1.1 200 Ok\r\n"
-			"Content-Length: %zd\r\n\r\n", formatted.len);
 
-		tls_writeb2(http->tls, resp, formatted);
-		bfree(&id);
-		bfree(&resp);
-		return http_complete;
+		struct http_ondata_fn_result result = {
+			.error = 0,
+			.code = http_ok,
+			.payload = formatted };
+		return result;
 	}
 }
 
 http_callback_fun(feed) {
+	int user = 1;
+	int socket = 1;
 	sqlite3_reset(selectlock);
-	sqlite3_bind_int(selectlock, 1, http->user);
+	sqlite3_bind_int(selectlock, 1, user);
 	if(sqlite3_step(selectlock) != SQLITE_ROW)
-		return http_bad_request;
+		return http_quick_result(http_bad_request);
 
 	int lock = sqlite3_column_int(selectlock, 0);
-	debug("Locked to %d, trying %d", lock, http->socket);
-	if(lock != http->socket)
-		return http_forbidden;
+	debug("Locked to %d, trying %d", lock, socket);
+	if(lock != socket)
+		return http_quick_result(http_forbidden);
 
-
+/*
 	bytes p = request->payload;
 	bytes commit = { .len = 0, .as_void = p.as_void };
 	while(p.len > 0) {
@@ -261,7 +276,7 @@ http_callback_fun(feed) {
 
 			if(http->file == -1) { 
 				debug("Could not open a file: %s",strerror(errno));
-				return http_bad_request;
+				return http_quick_result(400);
 			}
 
 			p = bslice(p, 5, 0);
@@ -271,7 +286,7 @@ http_callback_fun(feed) {
 			if(http->file == -1) { debug("No file."); return http_bad_request; }
 			if(p.len < 13) {
 				debug("Incomplete data structure.");
-				return http_bad_request;
+				return http_quick_result(400);
 			}
 			
 			struct insert * i = (void *) (p.as_char + 1);
@@ -282,7 +297,7 @@ http_callback_fun(feed) {
 
 			if(p.len < len) {
 				debug("Change lies."); 
-				return http_bad_request;
+				return http_quick_result(400);
 			}
 
 			commit.len += len;
@@ -290,11 +305,11 @@ http_callback_fun(feed) {
 		}
 		else {
 			debug("Unknown opcode: %d", p.as_char[0]);
-			return http_bad_request;
+			return http_quick_result(400);
 		}
 	}
-	write(http->file, commit.as_void, commit.len);
-	return http_ok;
+	write(http->file, commit.as_void, commit.len);*/
+	return http_quick_result(http_ok);
 }
 
 
@@ -368,19 +383,18 @@ int main(int argc, char **argv)
 		qp(lock, "/api/0/lock"),
 		qp(user, "/api/0/user"),
 		qp(login, "/api/0/login"),
-		qp(stop, "/api/0/stop")
 
 	};
 
-	callbacks_len = 8;
+	callbacks_len = 7;
 
 	callbacks = pairs;	
 
 
-	http_init();
+	struct http_server_internals * http = http_init();
 		
 	int tls = setup_socket(8080, tls_listener_ondata,
-				tls_listener_onclose);
+				tls_listener_onclose, http);
 
 	
 	epoll_listen();

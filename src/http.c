@@ -13,7 +13,7 @@ struct http_ondata_result {
 	int error;
 } http_ondata(bytes buffer)
 {
-	write(0, buffer->as_void, buffer.len);
+	write(0, buffer.as_void, buffer.len);
 
 	bfound f = bfind(buffer, Bs("\r\n\r\n"));
 
@@ -27,7 +27,6 @@ struct http_ondata_result {
 	struct http_request request = {
 		.header = f.before,
 		.payload = f.after,
-		.type = http_unknown
 	};
 
 	f = bfind(request.header, Bs("Content-Length: "));
@@ -55,20 +54,23 @@ struct http_ondata_result {
 	request.addr = f.before;
 
 	struct http_ondata_fn_result fnresult = http_ondata_callback(&request);
-	if(fnresult.error) goto bad_request;
 
 	struct http_ondata_result result = {
 		.len = 0,
-		.error = 0 }
+		.error = 0 };
 
-	switch(result.code) {
+	if(fnresult.error) goto bad_request;
+
+	switch(fnresult.code) {
 	case http_not_found:
+		debug("Not found.");
 		result.array[0] = Bs("HTTP/1.1 404 Not found\r\n"
 			"Content-Length: 0\r\n\r\n");
 		result.len = 1;
 		break;
 
-	case http_ok:
+	case http_ok: {
+		debug("Ok.");
 		bytes r = balloc(256);
 		r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
 			"Content-Length: %zd\r\n\r\n", fnresult.payload.len);
@@ -77,8 +79,9 @@ struct http_ondata_result {
 		result.array[1] = fnresult.payload;
 			
 		result.len = 2;
-		break;
+		break; } 
 
+bad_request:
 	case http_bad_request:
 		debug("Bad request");
 		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -86,10 +89,12 @@ struct http_ondata_result {
 		break;
 	
 	case http_forbidden:
+		
 		debug("Forbidden!");
 		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n\r\n");
 		result.len = 1;
 	default:
+		debug("ERROR!");
 		result.error = -1;
 		break;
 	};
