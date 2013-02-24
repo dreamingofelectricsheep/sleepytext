@@ -30,11 +30,11 @@ struct generic_epoll_object {
 	int fd;
 	epoll_fn ondata;
 	epoll_fn onclose;
-	void * auxiliary;
+	void *auxiliary;
 };
 
-
-void epoll_listen() {
+void epoll_listen()
+{
 	int max_events = 1024;
 	struct epoll_event buffer[max_events];
 
@@ -54,11 +54,9 @@ void epoll_listen() {
 			if (events & EPOLLERR) {
 				debug("Error reported: %s", strerror(errno));
 				object->onclose(object);
-			}
-			else if (events & EPOLLIN) {
+			} else if (events & EPOLLIN) {
 				object->ondata(object);
-			}
-			else if (events & EPOLLHUP || events & EPOLLRDHUP) {
+			} else if (events & EPOLLHUP || events & EPOLLRDHUP) {
 				debug("Hangup received on socket %d", socket);
 				object->onclose(object);
 			}

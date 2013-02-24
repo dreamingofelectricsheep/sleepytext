@@ -67,7 +67,7 @@ bytes bfromstr(const char *c_str)
 		null++;
 	}
 
-	bytes r = { (void*)  c_str, null };
+	bytes r = { (void *)c_str, null };
 	return r;
 }
 
@@ -195,7 +195,8 @@ int bcmp2(bytes first, bytes second)
 
 int bsame(bytes first, bytes second)
 {
-	if(first.length != second.length) return -1;
+	if (first.length != second.length)
+		return -1;
 	return memcmp(first.as_char, second.as_char, first.length);
 }
 

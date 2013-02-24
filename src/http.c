@@ -1,11 +1,9 @@
 
-	
-
 struct http_ondata_fn_result {
 	int error;
 	int code;
-	bytes payload; } http_ondata_callback(struct http_request * request);
-
+	bytes payload;
+} http_ondata_callback(struct http_request *request);
 
 struct http_ondata_result {
 	bytes array[5];
@@ -22,7 +20,8 @@ struct http_request http_parse_request(bytes buffer)
 	if (f.found.len == 0) {
 		debug("Partial http header.");
 
-		return (struct http_request){};
+		return (struct http_request) {
+		};
 	}
 
 	struct http_request request = {
@@ -32,21 +31,20 @@ struct http_request http_parse_request(bytes buffer)
 
 	f = bfind(request.header, Bs("Content-Length: "));
 
-	if(f.found.len > 0) {
+	if (f.found.len > 0) {
 		f = bfind(f.after, Bs("\r\n"));
 
 		int contentlen = btoi(f.before);
 
-	
 		if (contentlen != request.payload.len) {
-			debug("Partial body received. %lu out of %d bytes available.", 
-				request.payload.len, contentlen);
+			debug
+			    ("Partial body received. %lu out of %d bytes available.",
+			     request.payload.len, contentlen);
 
-			return (struct http_request){};
+			return (struct http_request) {
+			};
 		}
 	}
-
-	
 
 	f = bfind(request.header, Bs(" "));
 	f = bfind(f.after, Bs(" "));
@@ -56,45 +54,48 @@ struct http_request http_parse_request(bytes buffer)
 	return request;
 }
 
-
-
-struct http_ondata_result http_assemble_response(struct http_ondata_fn_result fnresult)
+struct http_ondata_result http_assemble_response(struct http_ondata_fn_result
+						 fnresult)
 {
 	struct http_ondata_result result = {
 		.len = 0,
-		.error = 0 };
+		.error = 0
+	};
 
-	if(fnresult.error) goto bad_request;
+	if (fnresult.error)
+		goto bad_request;
 
-	switch(fnresult.code) {
+	switch (fnresult.code) {
 	case http_not_found:
 		debug("Not found.");
 		result.array[0] = Bs("HTTP/1.1 404 Not found\r\n"
-			"Content-Length: 0\r\n\r\n");
+				     "Content-Length: 0\r\n\r\n");
 		result.len = 1;
 		break;
 
-	case http_ok: {
-		debug("Ok.");
-		bytes r = balloc(256);
-		r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
-			"Content-Length: %zd\r\n\r\n", fnresult.payload.len);
-		
-		result.array[0] = r;
-		result.array[1] = fnresult.payload;
-			
-		result.len = 2;
-		break; } 
+	case http_ok:{
+			debug("Ok.");
+			bytes r = balloc(256);
+			r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
+					 "Content-Length: %zd\r\n\r\n",
+					 fnresult.payload.len);
 
-bad_request:
+			result.array[0] = r;
+			result.array[1] = fnresult.payload;
+
+			result.len = 2;
+			break;
+		}
+
+ bad_request:
 	case http_bad_request:
 		debug("Bad request");
 		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n\r\n");
 		result.len = 1;
 		break;
-	
+
 	case http_forbidden:
-		
+
 		debug("Forbidden!");
 		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n\r\n");
 		result.len = 1;
@@ -103,15 +104,17 @@ bad_request:
 		result.error = -1;
 		break;
 	};
-	
+
 	return result;
 }
 
-bytes http_extract_param(bytes header, bytes field) {	
+bytes http_extract_param(bytes header, bytes field)
+{
 	bfound f = bfind(header, field);
 	f = bfind(f.after, Bs("\r\n"));
 	return f.before;
 }
+
 /*
 int http_websocket_accept(struct http_connection *http, struct http_request * request) {
 	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
@@ -131,9 +134,6 @@ int http_websocket_accept(struct http_connection *http, struct http_request * re
 	SHA1_Final(digest, &sha);
 	
 
-
 	return http_complete;
 }
 */
-
-
