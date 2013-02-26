@@ -22,12 +22,12 @@
 
 sqlite3 *db;
 sqlite3_stmt *selectpassword;
+sqlite3_stmt *selectsession;
 sqlite3_stmt *updatepassword;
 sqlite3_stmt *updatelogin;
 sqlite3_stmt *updatelastseen;
 sqlite3_stmt *insertuser;
-sqlite3_stmt *selectlock;
-sqlite3_stmt *updatelock;
+sqlite3_stmt *selectuserid;
 
 sqlite3_stmt *insertbranch;
 sqlite3_stmt *selectdocument;
@@ -42,6 +42,16 @@ struct insert {
 
 #define http_callback_fun(id) struct http_ondata_fn_result \
 	http_callback_ ## id(struct http_request * request)
+
+struct http_ondata_fn_result http_quick_result(int code)
+{
+	return (struct http_ondata_fn_result) {
+		.header = (bytes) { 0, 0 }, 
+		.error = 0,
+		.code = code,
+		.payload = (bytes) { 0, 0 }};
+}
+
 
 http_callback_fun(root)
 {
@@ -60,7 +70,6 @@ http_callback_fun(root)
 
 http_callback_fun(branch)
 {
-
 	int blobid = btoi(bslice(request->addr, Bs("/api/0/branch/").len, 0));
 
 	bytes path = balloc(256);
@@ -70,29 +79,10 @@ http_callback_fun(branch)
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	struct http_ondata_fn_result result = {
-		.error = 0,
-		.code = http_ok,
-		.payload = page
-	};
+	struct http_ondata_fn_result result = http_quick_result(http_ok);
+	result.payload = page;
 
 	return result;
-}
-
-int update_lock(int user, int lock)
-{
-	sqlite3_reset(updatelock);
-	sqlite3_bind_int(updatelock, 1, lock);
-	sqlite3_bind_int(updatelock, 2, user);
-
-	return sqlite3_step(updatelock);
-}
-
-struct http_ondata_fn_result http_quick_result(int code)
-{
-	return (struct http_ondata_fn_result) {
-		.error = 0,.code = code,.payload = (bytes) {
-	0, 0}};
 }
 
 http_callback_fun(login)
@@ -114,20 +104,20 @@ http_callback_fun(login)
 		.as_cvoid = sqlite3_column_blob(selectpassword, 0)
 	};
 
-	uint64_t id = sqlite3_column_int64(selectpassword, 1);
+	uint64_t session = sqlite3_column_int64(selectpassword, 1);
 
 	if (bsame(password, dbpassword) == 0) {
-		//http->user = id;
-
 		sqlite3_reset(updatelastseen);
-		sqlite3_bind_int(updatelastseen, 1, id);
+		sqlite3_bind_int(updatelastseen, 1, session);
 		sqlite3_step(updatelastseen);
-		int socket = 0;
 
-		if (update_lock(id, socket) != SQLITE_DONE)
-			debug("Could not lock the user.");
+		struct http_ondata_fn_result result = http_quick_result(http_ok);
+		bytes text = balloc(64);
+		text.len = snprintf(text.as_void, text.len, 
+			"Set-Cookie: %ld; secure\r\n\r\n", session);
+		result.header = text;
 
-		return http_quick_result(http_ok);
+		return result;
 	} else {
 		return http_quick_result(http_bad_request);
 	}
@@ -147,9 +137,6 @@ http_callback_fun(user)
 	if (sqlite3_step(insertuser) != SQLITE_DONE) {
 		return http_quick_result(http_bad_request);
 	} else {
-		int user = sqlite3_last_insert_rowid(db);
-		int socket = 0;
-		update_lock(user, socket);
 		return http_quick_result(http_ok);
 	}
 }
@@ -159,28 +146,24 @@ http_callback_fun(void)
 	return http_quick_result(http_ok);
 }
 
-http_callback_fun(lock)
-{
-	int user = 1;
-	debug("Locking user: %d", user);
-	if (user == 0)
-		return http_quick_result(http_bad_request);
-
-	int socket = 0;
-	if (update_lock(user, socket) != SQLITE_DONE)
-		return http_quick_result(http_bad_request);
-	else
-		return http_quick_result(http_ok);
-
-}
-
 http_callback_fun(newbranch)
 {
+/*	bytes bsession = http_extract_param(request->header, Bs("Cookie"));
+	int session = itob(bsession);
+
+	sqlite3_reset(selectuserid);
+	sqlite3_bind_int(selectuserid, 1, session);
+
+	if(sqlite3_step(selectuserid) != SQLITE_ROW)
+		return http_quick_result(http_bad_request);
+
+	
+
 	sqlite3_reset(insertbranch);
 
+	
 	int user = 1;
 	if (user == 0)
-		return http_quick_result(http_bad_request);
 
 	sqlite3_bind_int(insertbranch, 1, user);
 	sqlite3_bind_int(insertbranch, 2, 0);
@@ -212,10 +195,13 @@ http_callback_fun(newbranch)
 		};
 		return result;
 	}
+*/	
+	return http_quick_result(http_bad_request);
 }
 
 http_callback_fun(feed)
 {
+/*
 	int user = 1;
 	int socket = 1;
 	sqlite3_reset(selectlock);
@@ -228,7 +214,6 @@ http_callback_fun(feed)
 	if (lock != socket)
 		return http_quick_result(http_forbidden);
 
-/*
 	bytes p = request->payload;
 	bytes commit = { .len = 0, .as_void = p.as_void };
 	while(p.len > 0) {
@@ -328,18 +313,18 @@ int main(int argc, char **argv)
 		debug(s); \
 		goto cleanup; }
 
-	ps("select password, id from users where login = ?", selectpassword)
-	    ps("select lock from users where id = ?", selectlock)
-	    ps("update users set password = ? where id = ?", updatepassword)
-	    ps("update users set login = ? where id = ?", updatelogin)
-	    ps("update users set lock = ? where id = ?", updatelock)
-	    ps("update users set lastseen = datetime('now') where id = ?",
-	       updatelastseen)
-	    ps("insert into users(login, password, created, lastseen) "
-	       "values(?, ?, datetime('now'), datetime('now'))", insertuser)
+	ps("select password, session from users where login = ?", selectpassword)
+	ps("select session from users where id = ?", selectsession)
+	ps("select id from users where session = ?", selectuserid)
+	ps("update users set password = ? where session = ?", updatepassword)
+	ps("update users set login = ? where session = ?", updatelogin)
+	ps("update users set lastseen = datetime('now') where session = ?",
+	   updatelastseen)
+	ps("insert into users(login, password, created, lastseen, session) "
+	   "values(?, ?, datetime('now'), datetime('now'), random())", insertuser)
 
-	    ps("insert into branches(userid, docid, blobid, parentid, pos) "
-	       "values(?, ?, ?, ?, ?)", insertbranch);
+	ps("insert into branches(userid, docid, blobid, parentid, pos) "
+	   "values(?, ?, ?, ?, ?)", insertbranch);
 	ps("select id, blobid, parentid, pos from branches where "
 	   "docid = ?", selectdocument);
 
@@ -350,10 +335,9 @@ int main(int argc, char **argv)
 		q(newbranch, "/api/0/newbranch"),
 		q(branch, "/api/0/branch/"),
 		q(feed, "/api/0/feed"),
-		q(lock, "/api/0/lock"),
 		q(user, "/api/0/user"),
 		q(login, "/api/0/login"),
-		q(login, "")
+		q(void, "")
 	};
 #undef q
 

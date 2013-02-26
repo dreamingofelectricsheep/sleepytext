@@ -158,15 +158,13 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 	if (result < 0)
 		goto error;
 
+
+
 	result = tls_ondata(&http_tls->tls, tcpbuffer, &buffer);
 	if (result < 0)
 		goto error;
 
 	http_tls->buffer.len += buffer.len;
-
-	debug("----------------");
-	write(0, buffer.as_void, buffer.len);
-	debug("----------------");
 
 	if (buffer.len > 0) {
 		debug("Crunching HTTP.");
@@ -182,10 +180,13 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 			goto error;
 
 		debug("Response chunks: %zd", final.len);
+		debug("------------------");
 		for (int i = 0; i < final.len; i++) {
+			write(0, final.array[i].as_void, final.array[i].len);
 			SSL_write(http_tls->tls.tls, final.array[i].as_void,
 				  final.array[i].len);
 		}
+		debug("------------------");
 
 		if (final.len != 0)
 			bfree(&http_tls->buffer);

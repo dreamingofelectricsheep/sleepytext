@@ -3,6 +3,7 @@ struct http_ondata_fn_result {
 	int error;
 	int code;
 	bytes payload;
+	bytes header;
 } http_ondata_callback(struct http_request *request);
 
 struct http_ondata_result {
@@ -77,13 +78,17 @@ struct http_ondata_result http_assemble_response(struct http_ondata_fn_result
 			debug("Ok.");
 			bytes r = balloc(256);
 			r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
-					 "Content-Length: %zd\r\n\r\n",
+					 "Content-Length: %zd\r\n",
 					 fnresult.payload.len);
 
 			result.array[0] = r;
-			result.array[1] = fnresult.payload;
+			if(fnresult.header.len > 0)
+				result.array[1] = fnresult.header;
+			else
+				result.array[1] = Bs("\r\n");
+			result.array[2] = fnresult.payload;
 
-			result.len = 2;
+			result.len = 3;
 			break;
 		}
 
