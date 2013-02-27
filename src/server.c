@@ -112,9 +112,9 @@ http_callback_fun(login)
 		sqlite3_step(updatelastseen);
 
 		struct http_ondata_fn_result result = http_quick_result(http_ok);
-		bytes text = balloc(64);
+		bytes text = balloc(128);
 		text.len = snprintf(text.as_void, text.len, 
-			"Set-Cookie: %ld; secure\r\n\r\n", session);
+			"Set-Cookie: session=%ld; path=/; secure\r\n\r\n", session);
 		result.header = text;
 
 		return result;

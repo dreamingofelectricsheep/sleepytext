@@ -1,39 +1,9 @@
-<html><head><title>Sleepy Text</title><script type="text/javascript">var user;
-
-function request(addr, data, success, failure) {
-	var req = new XMLHttpRequest()
-	req.open('POST', addr)
-	req.timeout = 5000
-	req.ontimeout = function() { alert('Timeout') }
-
-	req.onreadystatechange = function() {
-		if(req.readyState != 4) return
-		if(req.status != 200 && typeof failure != undefined) 
-			failure(req.status)
-		if(typeof success != undefined) success()
-	}
-	
-	req.send(data)
+<html><head><title>Sleepy Text</title><script type="text/javascript">function isloggedin() {
+	if(document.cookie.indexOf('session') == -1) return false
+	return true;
 }
 
-
-function makelogin(user, success, failure) {
-	request('/api/0/login', user.login + '\n' + user.password, success, failure)
-}
-
-
-function trytologin() {
-	if(localStorage.user != undefined) {	
-		var tryuser = JSON.parse(localStorage.user)
-		makelogin(tryuser, function() { user = tryuser }, 
-			function() { 
-				localStorage.removeItem('user')
-				alert("Could not log in!") })
-	}
-}
-
-
-function enternoaccountview() {
+function enterloginview() {
 	view = {
 		username: tags.input({ id: 'username', type: 'text', 
 			placeholder: 'john@example.com' }),
@@ -54,15 +24,13 @@ function enternoaccountview() {
 	}
 
 	view.register.onclick = function() {
-		var tryuser = {
+		var user = {
 			login: view.username.value,
 			password: view.password.value
 		}
 
-		request('/api/0/user', tryuser.login + '\n' + tryuser.password,
+		request('/api/0/user', user.login + '\n' + user.password,
 			function() {
-				user = tryuser
-				localStorage.user = JSON.stringify(user)
 				view.leave()
 				entereditorview()
 			}, function() {
@@ -70,17 +38,16 @@ function enternoaccountview() {
 	}
 	
 	view.login.onclick = function() {
-		var tryuser = {
+		var user = {
 			login: view.username.value,
 			password: view.password.value
 		}
 
-		makelogin(tryuser, function() {
-			user = tryuser
-			localStorage.user = JSON.stringify(user)
-			view.leave()
-			entereditorview()
-		}, function() { alert("Wrong login") })	
+		request('/api/0/login', user.login + '\n' + user.password,
+			function() {
+				view.leave()
+				entereditorview()
+			}, function() { alert("Wrong login") })	
 	}
 	
 }
@@ -89,7 +56,7 @@ function enteraccountview() {
 	view = {}
 
 	
-	enternoaccountview()
+	enterloginview()
 
 
 }</script><script type="text/javascript">var queue = [], intransfer = []
@@ -149,6 +116,8 @@ function entereditorview(activebranch) {
 
 	view.history.render = view.editor.last = view.editor.value = view.branch.render
 	view.history.position = view.history.steps.length
+
+	view.buttonbox = tags.div({ id: 'buttonbox' })
 
 
 	view.editor.oninput = function(e) {
@@ -231,18 +200,17 @@ function entereditorview(activebranch) {
 	}
 	
 	body.appendChild(view.editor)
-	body.appendChild(view.graph)
-	body.appendChild(view.branchbtn)
-	body.appendChild(view.userbtn)
+	view.buttonbox.appendChild(view.graph)
+	view.buttonbox.appendChild(view.branchbtn)
+	view.buttonbox.appendChild(view.userbtn)
+	body.appendChild(view.buttonbox)
 
 	view.editor.focus()
 
 	view.leave = function() {
-		var list = [view.editor, view.branchbtn, view.graph, view.userbtn]
-		for(var i in list)
-			body.removeChild(list[i])
+		while(body.firstChild != undefined)
+			body.removeChild(body.firstChild)
 
-		view.slider.despawn()
 		view = undefined
 	}
 }</script><script type="text/javascript">function Graph(canvas, textwidth, font) {
@@ -585,7 +553,23 @@ history.prototype = {
 			entereditorview()
 		}, function() { alert('Could not lock for some reason') })
 	}
-}</script><script type="text/javascript">
+}</script><script type="text/javascript">function request(addr, data, success, failure) {
+	var req = new XMLHttpRequest()
+	req.open('POST', addr)
+	req.timeout = 5000
+	req.ontimeout = function() { alert('Timeout') }
+
+	req.onreadystatechange = function() {
+		if(req.readyState != 4) return
+		if(req.status != 200 && typeof failure != undefined) 
+			failure(req.status)
+		if(typeof success != undefined) success()
+	}
+	
+	req.send(data)
+}
+
+
 
 function encode_int32(n) {
 	var bytes = new Uint8Array(4)
@@ -649,16 +633,14 @@ function synch(req) {
 		}
 	}
 	
-	if(typeof user != undefined && user != undefined) {		
-		if(intransfer.length == 0 && queue.length > 0) {
-			intransfer = queue
-			queue = []
+	if(intransfer.length == 0 && queue.length > 0) {
+		intransfer = queue
+		queue = []
 
-			req.open('POST', '/api/0/feed')
+		req.open('POST', '/api/0/feed')
 
-			req.send(transferencode(intransfer))
-			
-		}
+		req.send(transferencode(intransfer))
+		
 	}
 
 	setTimeout(function() { synch(req) }, 1000)
@@ -667,7 +649,6 @@ function synch(req) {
 window.onload = function() {
 	body = document.getElementsByTagName('body')[0]
 	entereditorview()
-	trytologin()
 	synch()
 }</script><script type="text/javascript">function slider(parent, onchange) {
 	this.parent = parent
@@ -719,9 +700,6 @@ slider.prototype = {
 
 		if(this.onchange == undefined || logic == true) return
 		this.onchange(this.position)
-	},
-	despawn: function() {
-		this.parent.removeChild(this.bar)
 	}
 }</script><script type="text/javascript">function tags(tag, options, children) {
 	var element = document.createElement(tag)
@@ -750,7 +728,8 @@ slider.prototype = {
 				return tags(tag, options, children) 
 			} 
 		})(arguments[i])
-})('html', 'div', 'p', 'input', 'body', 'a', 'textarea')</script><style type="text/css">body {
+})('html', 'div', 'p', 'input', 'body', 'a', 'textarea')</script><style type="text/css">
+body {
 	margin: 0;
 	text-align: center;
 }
@@ -783,14 +762,21 @@ slider.prototype = {
 #branchbutton, #graphbutton, #userbtn, .button {
 	color: white;
 	cursor: pointer;
-	position: fixed;
 	font-family: sans-serif;
 	font-size: 14px;
-	bottom: 3px;
 	line-height: 24px;
 	background: blue;
 	border-radius: 3px;
 	padding: 1px 12px;
+	margin: 3px;
+	display: inline-block;
+}
+#buttonbox {
+	position: fixed;
+	bottom: 0;
+	right: 0;
+	width: 20%;
+	text-align: center;
 }
 #register, #login {
 	position: static;

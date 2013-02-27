@@ -15,8 +15,10 @@ int tls_ondata(struct tls_connection *tls, bytes encrypted, bytes * plaintext)
 	void *pos = plaintext->as_void;
 	plaintext->len = 0;
 
+	debug("%s", SSL_state_string_long(tls->tls));
 	while (stop == 0) {
 		int len = SSL_read(tls->tls, pos, last);
+		debug("%s", SSL_state_string_long(tls->tls));
 
 		debug("%d bytes available in tls for reading.", len);
 
@@ -49,6 +51,7 @@ int tls_ondata(struct tls_connection *tls, bytes encrypted, bytes * plaintext)
 
 void tls_onclose(struct tls_connection *tls)
 {
+	debug("%s", SSL_state_string_long(tls->tls));
 	SSL_free(tls->tls);
 }
 
@@ -57,6 +60,8 @@ void tls_onsetup(SSL_CTX * ctx, struct tls_connection *tls)
 	tls->tls = SSL_new(ctx);
 	BIO *rbio = BIO_new(BIO_s_mem()), *wbio = BIO_new(BIO_s_mem());
 
+	debug("%s", SSL_state_string_long(tls->tls));
 	SSL_set_bio(tls->tls, BIO_new(BIO_s_mem()), BIO_new(BIO_s_mem()));
 	SSL_set_accept_state(tls->tls);
+	debug("%s", SSL_state_string_long(tls->tls));
 }

@@ -1,3 +1,4 @@
+
 body {
 	margin: 0;
 	text-align: center;
@@ -31,14 +32,21 @@ body {
 #branchbutton, #graphbutton, #userbtn, .button {
 	color: white;
 	cursor: pointer;
-	position: fixed;
 	font-family: sans-serif;
 	font-size: 14px;
-	bottom: 3px;
 	line-height: 24px;
 	background: blue;
 	border-radius: 3px;
 	padding: 1px 12px;
+	margin: 3px;
+	display: inline-block;
+}
+#buttonbox {
+	position: fixed;
+	bottom: 0;
+	right: 0;
+	width: 20%;
+	text-align: center;
 }
 #register, #login {
 	position: static;

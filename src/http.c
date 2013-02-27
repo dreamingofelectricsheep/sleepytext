@@ -95,14 +95,16 @@ struct http_ondata_result http_assemble_response(struct http_ondata_fn_result
  bad_request:
 	case http_bad_request:
 		debug("Bad request");
-		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n\r\n");
+		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n"
+			"Content-Length: 0\r\n\r\n");
 		result.len = 1;
 		break;
 
 	case http_forbidden:
 
 		debug("Forbidden!");
-		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n\r\n");
+		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n"
+			"Content-Length: 0\r\n\r\n");
 		result.len = 1;
 	default:
 		debug("ERROR!");

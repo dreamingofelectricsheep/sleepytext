@@ -23,6 +23,8 @@ function entereditorview(activebranch) {
 	view.history.render = view.editor.last = view.editor.value = view.branch.render
 	view.history.position = view.history.steps.length
 
+	view.buttonbox = tags.div({ id: 'buttonbox' })
+
 
 	view.editor.oninput = function(e) {
 		if(view.history.position != view.history.steps.length) {
@@ -104,18 +106,17 @@ function entereditorview(activebranch) {
 	}
 	
 	body.appendChild(view.editor)
-	body.appendChild(view.graph)
-	body.appendChild(view.branchbtn)
-	body.appendChild(view.userbtn)
+	view.buttonbox.appendChild(view.graph)
+	view.buttonbox.appendChild(view.branchbtn)
+	view.buttonbox.appendChild(view.userbtn)
+	body.appendChild(view.buttonbox)
 
 	view.editor.focus()
 
 	view.leave = function() {
-		var list = [view.editor, view.branchbtn, view.graph, view.userbtn]
-		for(var i in list)
-			body.removeChild(list[i])
+		while(body.firstChild != undefined)
+			body.removeChild(body.firstChild)
 
-		view.slider.despawn()
 		view = undefined
 	}
 }

@@ -1,3 +1,19 @@
+function request(addr, data, success, failure) {
+	var req = new XMLHttpRequest()
+	req.open('POST', addr)
+	req.timeout = 5000
+	req.ontimeout = function() { alert('Timeout') }
+
+	req.onreadystatechange = function() {
+		if(req.readyState != 4) return
+		if(req.status != 200 && typeof failure != undefined) 
+			failure(req.status)
+		if(typeof success != undefined) success()
+	}
+	
+	req.send(data)
+}
+
 
 
 function encode_int32(n) {
@@ -62,16 +78,14 @@ function synch(req) {
 		}
 	}
 	
-	if(typeof user != undefined && user != undefined) {		
-		if(intransfer.length == 0 && queue.length > 0) {
-			intransfer = queue
-			queue = []
+	if(intransfer.length == 0 && queue.length > 0) {
+		intransfer = queue
+		queue = []
 
-			req.open('POST', '/api/0/feed')
+		req.open('POST', '/api/0/feed')
 
-			req.send(transferencode(intransfer))
-			
-		}
+		req.send(transferencode(intransfer))
+		
 	}
 
 	setTimeout(function() { synch(req) }, 1000)

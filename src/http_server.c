@@ -179,14 +179,13 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 		if (final.error < 0)
 			goto error;
 
+		debug("%s", SSL_state_string_long(http_tls->tls.tls));
 		debug("Response chunks: %zd", final.len);
-		debug("------------------");
 		for (int i = 0; i < final.len; i++) {
-			write(0, final.array[i].as_void, final.array[i].len);
 			SSL_write(http_tls->tls.tls, final.array[i].as_void,
 				  final.array[i].len);
+			debug("%s", SSL_state_string_long(http_tls->tls.tls));
 		}
-		debug("------------------");
 
 		if (final.len != 0)
 			bfree(&http_tls->buffer);

@@ -48,8 +48,5 @@ slider.prototype = {
 
 		if(this.onchange == undefined || logic == true) return
 		this.onchange(this.position)
-	},
-	despawn: function() {
-		this.parent.removeChild(this.bar)
 	}
 }
