@@ -20,14 +20,6 @@
 #include <openssl/err.h>
 #include <openssl/sha.h>
 
-
-enum http_result {
-	http_ok,
-	http_bad_request,
-	http_not_found,
-	http_forbidden
-};
-
 struct http_request {
 	bytes header;
 	bytes payload;
@@ -172,7 +164,10 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 		    http_parse_request(http_tls->buffer);
 
 		struct http_ondata_fn_result res =
-		    http_server_callback_dispatch(http_tls->server, &parsed);
+		
+		res = http_websocket_accept(&parsed);
+		if(res.code != http_switching_protocols)
+		    res = http_server_callback_dispatch(http_tls->server, &parsed);
 
 		struct http_ondata_result final = http_assemble_response(res);
 

@@ -43,14 +43,7 @@ struct insert {
 #define http_callback_fun(id) struct http_ondata_fn_result \
 	http_callback_ ## id(struct http_request * request)
 
-struct http_ondata_fn_result http_quick_result(int code)
-{
-	return (struct http_ondata_fn_result) {
-		.header = (bytes) { 0, 0 }, 
-		.error = 0,
-		.code = code,
-		.payload = (bytes) { 0, 0 }};
-}
+
 
 
 http_callback_fun(root)
