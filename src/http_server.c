@@ -163,27 +163,30 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 		struct http_request parsed =
 		    http_parse_request(http_tls->buffer);
 
-		struct http_ondata_fn_result res =
-		
-		res = http_websocket_accept(&parsed);
-		if(res.code != http_switching_protocols)
-		    res = http_server_callback_dispatch(http_tls->server, &parsed);
+		if(parsed.addr.len > 0) {
 
-		struct http_ondata_result final = http_assemble_response(res);
+			struct http_ondata_fn_result res =
+			
+			res = http_websocket_accept(&parsed);
+			if(res.code != http_switching_protocols)
+				res = http_server_callback_dispatch(http_tls->server, &parsed);
 
-		if (final.error < 0)
-			goto error;
+			struct http_ondata_result final = http_assemble_response(res);
 
-		debug("%s", SSL_state_string_long(http_tls->tls.tls));
-		debug("Response chunks: %zd", final.len);
-		for (int i = 0; i < final.len; i++) {
-			SSL_write(http_tls->tls.tls, final.array[i].as_void,
-				  final.array[i].len);
+			if (final.error < 0)
+				goto error;
+
 			debug("%s", SSL_state_string_long(http_tls->tls.tls));
-		}
+			debug("Response chunks: %zd", final.len);
+			for (int i = 0; i < final.len; i++) {
+				SSL_write(http_tls->tls.tls, final.array[i].as_void,
+					  final.array[i].len);
+				debug("%s", SSL_state_string_long(http_tls->tls.tls));
+			}
 
-		if (final.len != 0)
-			bfree(&http_tls->buffer);
+			if (final.len != 0)
+				bfree(&http_tls->buffer);
+		}
 	}
 
 	BIO *mem = SSL_get_wbio(http_tls->tls.tls);

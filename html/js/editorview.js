@@ -6,9 +6,9 @@ function entereditorview(activebranch) {
 		id: 'editor' })
 
 
-	view.graph = tags.div({ id: 'graphbutton' }, 'graph')
-	view.branchbtn = tags.div({ id: 'branchbutton' }, 'branch')
-	view.userbtn = tags.div({ id: 'userbtn' }, 'account')
+	view.graph = tags.div({ id: 'graphbutton', class: 'button' }, 'graph')
+	view.branchbtn = tags.div({ id: 'branchbutton', class: 'button' }, 'branch')
+	view.userbtn = tags.div({ id: 'userbtn', class: 'button' }, 'account')
 
 	view.slider = new slider(body, function(p) {
 		var go = Math.floor(p * view.history.steps.length)
@@ -30,6 +30,8 @@ function entereditorview(activebranch) {
 		if(view.history.position != view.history.steps.length) {
 			branchout()
 		}
+		
+		view.editor.style.height = view.editor.scrollHeight + 'px'
 
 		var text = e.target.value
 		var last = view.editor.last

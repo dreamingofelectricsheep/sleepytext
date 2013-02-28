@@ -1,4 +1,4 @@
-<html><head><title>Sleepy Text</title><script type="text/javascript">function isloggedin() {
+<html><head><title>Sleepy Text</title><meta name="viewport" content="user-scalable=no" /><script type="text/javascript">function isloggedin() {
 	if(document.cookie.indexOf('session') == -1) return false
 	return true;
 }
@@ -100,9 +100,9 @@ function entereditorview(activebranch) {
 		id: 'editor' })
 
 
-	view.graph = tags.div({ id: 'graphbutton' }, 'graph')
-	view.branchbtn = tags.div({ id: 'branchbutton' }, 'branch')
-	view.userbtn = tags.div({ id: 'userbtn' }, 'account')
+	view.graph = tags.div({ id: 'graphbutton', class: 'button' }, 'graph')
+	view.branchbtn = tags.div({ id: 'branchbutton', class: 'button' }, 'branch')
+	view.userbtn = tags.div({ id: 'userbtn', class: 'button' }, 'account')
 
 	view.slider = new slider(body, function(p) {
 		var go = Math.floor(p * view.history.steps.length)
@@ -124,6 +124,8 @@ function entereditorview(activebranch) {
 		if(view.history.position != view.history.steps.length) {
 			branchout()
 		}
+		
+		view.editor.style.height = view.editor.scrollHeight + 'px'
 
 		var text = e.target.value
 		var last = view.editor.last
@@ -751,7 +753,6 @@ body {
 	text-align: left;
 	font: 20px serif normal;
 	background-image: none;
-	height: 100%;
 	width: 100%;
 	padding: 10px 20% 100px 20%;
 	border: none;
@@ -759,7 +760,7 @@ body {
 	resize: none;
 	border-radius: 5px;
 }
-#branchbutton, #graphbutton, #userbtn, .button {
+.button {
 	color: white;
 	cursor: pointer;
 	font-family: sans-serif;
@@ -795,17 +796,6 @@ body {
 #username {
 	margin-top: 10%;
 }
-	
-
-#userbtn {
-	right: 10px;
-}
-#branchbutton {
-	right: 90px;
-}
-#graphbutton {
-	right: 160px;
-}
 canvas {
 	position: fixed;
 	left: 0;
@@ -828,11 +818,11 @@ canvas {
 	width: 60%;
 	height: 4px;
 	background: lightblue;
-	cursor: hand;
+	cursor: pointer;
 }
 .slider-bar div {
 	margin-left: -8px;
-	cursor: hand;
+	cursor: pointer;
 	position: relative;
 	left: 0;
 	top: -6px;

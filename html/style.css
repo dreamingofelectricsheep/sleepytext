@@ -21,7 +21,6 @@ body {
 	text-align: left;
 	font: 20px serif normal;
 	background-image: none;
-	height: 100%;
 	width: 100%;
 	padding: 10px 20% 100px 20%;
 	border: none;
@@ -29,7 +28,7 @@ body {
 	resize: none;
 	border-radius: 5px;
 }
-#branchbutton, #graphbutton, #userbtn, .button {
+.button {
 	color: white;
 	cursor: pointer;
 	font-family: sans-serif;
@@ -65,17 +64,6 @@ body {
 #username {
 	margin-top: 10%;
 }
-	
-
-#userbtn {
-	right: 10px;
-}
-#branchbutton {
-	right: 90px;
-}
-#graphbutton {
-	right: 160px;
-}
 canvas {
 	position: fixed;
 	left: 0;
@@ -98,11 +86,11 @@ canvas {
 	width: 60%;
 	height: 4px;
 	background: lightblue;
-	cursor: hand;
+	cursor: pointer;
 }
 .slider-bar div {
 	margin-left: -8px;
-	cursor: hand;
+	cursor: pointer;
 	position: relative;
 	left: 0;
 	top: -6px;

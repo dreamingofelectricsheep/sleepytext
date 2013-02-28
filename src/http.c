@@ -48,6 +48,7 @@ struct http_request http_parse_request(bytes buffer)
 		debug("Partial http header.");
 
 		return (struct http_request) {
+			.addr = (bytes) { 0, 0}
 		};
 	}
 
@@ -69,6 +70,7 @@ struct http_request http_parse_request(bytes buffer)
 			     request.payload.len, contentlen);
 
 			return (struct http_request) {
+				.addr = (bytes) { 0, 0}
 			};
 		}
 	}
@@ -109,6 +111,7 @@ struct http_ondata_fn_result http_websocket_accept(struct http_request * request
 	BIO_flush(b64);
 	bytes encoded = balloc(128);
 	encoded.len = BIO_read(mem, encoded.as_void, encoded.len);
+	BIO_free_all(b64);
 	
 	bytes header = balloc(256);
 	bytes tmp = bcat(header, Bs("Sec-WebSocket-Accept: "), encoded);
