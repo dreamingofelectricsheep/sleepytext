@@ -30,7 +30,7 @@ sqlite3_stmt *insertuser;
 sqlite3_stmt *selectuserid;
 
 sqlite3_stmt *insertbranch;
-sqlite3_stmt *selectdocument;
+sqlite3_stmt *selectbranches;
 
 int lastblob = 0;
 
@@ -45,7 +45,26 @@ struct insert {
 
 
 
+int getuserid(bytes header)
+{
 
+	bytes cookie = http_extract_param(header, Bs("Cookie"));
+	bfound f = bfind(cookie, Bs("session="));
+	f = bfind(f.after, Bs(";"));
+	int64_t session = btoi64(f.before);
+
+	debug("User session: %ld", session);
+	sqlite3_reset(selectuserid);
+	sqlite3_bind_int64(selectuserid, 1, session);
+
+
+	if(sqlite3_step(selectuserid) != SQLITE_ROW)
+		return 0;
+
+	return sqlite3_column_int(selectuserid, 0);
+}
+
+	
 http_callback_fun(root)
 {
 	int f = open("html/main.html", 0);
@@ -66,13 +85,13 @@ http_callback_fun(branch)
 	int blobid = btoi(bslice(request->addr, Bs("/api/0/branch/").len, 0));
 
 	bytes path = balloc(256);
-	snprintf(path.as_void, path.len, "branches/%d", blobid);
+	path = bprintf(path, "branches/%d", blobid);
 
 	int f = open(path.as_char, O_RDONLY);
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	struct http_ondata_fn_result result = http_quick_result(http_ok);
+	struct http_ondata_fn_result result = http_result(http_ok);
 	result.payload = page;
 
 	return result;
@@ -89,7 +108,7 @@ http_callback_fun(login)
 	sqlite3_bind_text(selectpassword, 1, user.as_void, user.len, 0);
 
 	if (sqlite3_step(selectpassword) != SQLITE_ROW) {
-		return http_quick_result(http_bad_request);
+		return http_result(http_bad_request);
 	}
 
 	bytes dbpassword = {
@@ -101,19 +120,55 @@ http_callback_fun(login)
 
 	if (bsame(password, dbpassword) == 0) {
 		sqlite3_reset(updatelastseen);
-		sqlite3_bind_int(updatelastseen, 1, session);
+		sqlite3_bind_int64(updatelastseen, 1, session);
 		sqlite3_step(updatelastseen);
 
-		struct http_ondata_fn_result result = http_quick_result(http_ok);
+		struct http_ondata_fn_result result = http_result(http_ok);
 		bytes text = balloc(128);
 		text.len = snprintf(text.as_void, text.len, 
-			"Set-Cookie: session=%ld; path=/; secure\r\n\r\n", session);
+				"Set-Cookie: session=%ld; path=/; secure\r\n\r\n", session);
 		result.header = text;
 
 		return result;
 	} else {
-		return http_quick_result(http_bad_request);
+		return http_result(http_bad_request);
 	}
+}
+
+http_callback_fun(branches)
+{
+	int64_t user = getuserid(request->header);
+
+	if(user == 0) return http_result(http_bad_request);
+
+	sqlite3_reset(selectbranches);
+	sqlite3_bind_int64(selectbranches, 1, user);
+
+	bytes mem = balloc(4096);
+	bytes resp = mem;
+
+	while(sqlite3_step(selectbranches) == SQLITE_ROW) {
+
+		bytes name;
+		name.as_void = (void*) sqlite3_column_blob(selectbranches, 0);
+		name.len = sqlite3_column_bytes(selectbranches, 0);
+
+		int64_t id = sqlite3_column_int64(selectbranches, 1);
+		int64_t parent = sqlite3_column_int64(selectbranches, 2);
+		int64_t pos = sqlite3_column_int64(selectbranches, 3);
+		int64_t document = sqlite3_column_int64(selectbranches, 4);
+
+		bytes printed = bprintf(resp, "%*s\n%ld %ld %ld %ld ", (int) name.len, name.as_void, 
+				id, parent, pos, document);
+		printed.len--; // Remove the final '\0'
+		resp.as_void += printed.len,
+			resp.len -= printed.len;
+	}
+
+	struct http_ondata_fn_result result = http_result(http_ok);
+	result.payload = (bytes) { .as_void = mem.as_void, .len = mem.len - resp.len };
+
+	return result;
 }
 
 http_callback_fun(user)
@@ -128,105 +183,81 @@ http_callback_fun(user)
 	sqlite3_bind_blob(insertuser, 2, password.as_void, password.len, 0);
 
 	if (sqlite3_step(insertuser) != SQLITE_DONE) {
-		return http_quick_result(http_bad_request);
+		return http_result(http_bad_request);
 	} else {
-		return http_quick_result(http_ok);
+		return http_result(http_ok);
 	}
 }
 
 http_callback_fun(void)
 {
-	return http_quick_result(http_ok);
+	return http_result(http_ok);
 }
 
 http_callback_fun(newbranch)
 {
-/*	bytes bsession = http_extract_param(request->header, Bs("Cookie"));
-	int session = itob(bsession);
+	int64_t user = getuserid(request->header),
+			parent, pos, document;
 
-	sqlite3_reset(selectuserid);
-	sqlite3_bind_int(selectuserid, 1, session);
+	if(user == 0) return http_result(http_bad_request);
 
-	if(sqlite3_step(selectuserid) != SQLITE_ROW)
-		return http_quick_result(http_bad_request);
 
-	
 
-	sqlite3_reset(insertbranch);
-
-	
-	int user = 1;
-	if (user == 0)
-
-	sqlite3_bind_int(insertbranch, 1, user);
-	sqlite3_bind_int(insertbranch, 2, 0);
-
-	lastblob++;
-	sqlite3_bind_int(insertbranch, 3, lastblob);
 
 	bfound f = bfind(request->payload, Bs("\n"));
-	int parent = 0, pos = 0;
+	bytes name = f.before;
+	bscanf(f.after, "%ld %ld %ld", &parent, &pos, &document);
 
-	if (f.found.length != 0) {
-		parent = btoi(f.before);
-		pos = btoi(f.after);
-	}
 
-	sqlite3_bind_int(insertbranch, 4, parent);
-	sqlite3_bind_int(insertbranch, 5, pos);
+	sqlite3_reset(insertbranch);
+	sqlite3_bind_text(insertbranch, 1, name.as_void, name.len, SQLITE_STATIC);
+	sqlite3_bind_int64(insertbranch, 2, parent);
+	sqlite3_bind_int64(insertbranch, 3, pos);
+	sqlite3_bind_int64(insertbranch, 4, document);
+	sqlite3_bind_int64(insertbranch, 5, user);
 
 	if (sqlite3_step(insertbranch) != SQLITE_DONE)
-		return http_quick_result(http_bad_request);
+		return http_result(http_bad_request);
 	else {
-		bytes id = balloc(256);
-		bytes formatted = itob(id, sqlite3_last_insert_rowid(db));
-
-		struct http_ondata_fn_result result = {
-			.error = 0,
-			.code = http_ok,
-			.payload = formatted
-		};
-		return result;
+		return http_result(http_ok);
 	}
-*/	
-	return http_quick_result(http_bad_request);
 }
 
 http_callback_fun(feed)
 {
-/*
-	int user = 1;
-	int socket = 1;
-	sqlite3_reset(selectlock);
-	sqlite3_bind_int(selectlock, 1, user);
-	if (sqlite3_step(selectlock) != SQLITE_ROW)
-		return http_quick_result(http_bad_request);
+	/*
+	   int user = 1;
+	   int socket = 1;
+	   sqlite3_reset(selectlock);
+	   sqlite3_bind_int(selectlock, 1, user);
+	   if (sqlite3_step(selectlock) != SQLITE_ROW)
+	   return http_result(http_bad_request);
 
-	int lock = sqlite3_column_int(selectlock, 0);
-	debug("Locked to %d, trying %d", lock, socket);
-	if (lock != socket)
-		return http_quick_result(http_forbidden);
+	   int lock = sqlite3_column_int(selectlock, 0);
+	   debug("Locked to %d, trying %d", lock, socket);
+	   if (lock != socket)
+	   return http_result(http_forbidden);
 
-	bytes p = request->payload;
-	bytes commit = { .len = 0, .as_void = p.as_void };
-	while(p.len > 0) {
-		if(p.as_char[0] == 'b') {
-			write(http->file, commit.as_void, commit.len);
+	   bytes p = request->payload;
+	   bytes commit = { .len = 0, .as_void = p.as_void };
+	   while(p.len > 0) {
+	   if(p.as_char[0] == 'b') {
+	   write(http->file, commit.as_void, commit.len);
 
-			if(http->file != -1) { close(http->file); http->file = -1; }
-			bytes bid = bslice(p, 1, 5);
-			if(bid.len != 4) { debug("Needs 4 bytes."); return http_bad_request; }
+	   if(http->file != -1) { close(http->file); http->file = -1; }
+	   bytes bid = bslice(p, 1, 5);
+	   if(bid.len != 4) { debug("Needs 4 bytes."); return http_bad_request; }
 
-			uint32_t id = ntohl(*((uint32_t*)bid.as_void));
+	   uint32_t id = ntohl(*((uint32_t*)bid.as_void));
 
-			bytes path = balloc(256);
-			snprintf(path.as_void, path.len, "./branches/%d", id);
+	   bytes path = balloc(256);
+	   snprintf(path.as_void, path.len, "./branches/%d", id);
 			http->file = open(path.as_char, O_APPEND | O_CREAT | O_RDWR);
 			bfree(&path);
 
 			if(http->file == -1) { 
 				debug("Could not open a file: %s",strerror(errno));
-				return http_quick_result(400);
+				return http_result(400);
 			}
 
 			p = bslice(p, 5, 0);
@@ -236,7 +267,7 @@ http_callback_fun(feed)
 			if(http->file == -1) { debug("No file."); return http_bad_request; }
 			if(p.len < 13) {
 				debug("Incomplete data structure.");
-				return http_quick_result(400);
+				return http_result(400);
 			}
 			
 			struct insert * i = (void *) (p.as_char + 1);
@@ -247,7 +278,7 @@ http_callback_fun(feed)
 
 			if(p.len < len) {
 				debug("Change lies."); 
-				return http_quick_result(400);
+				return http_result(400);
 			}
 
 			commit.len += len;
@@ -255,11 +286,11 @@ http_callback_fun(feed)
 		}
 		else {
 			debug("Unknown opcode: %d", p.as_char[0]);
-			return http_quick_result(400);
+			return http_result(400);
 		}
 	}
 	write(http->file, commit.as_void, commit.len);*/
-	return http_quick_result(http_ok);
+	return http_result(http_ok);
 }
 
 void stop()
@@ -316,10 +347,11 @@ int main(int argc, char **argv)
 	ps("insert into users(login, password, created, lastseen, session) "
 	   "values(?, ?, datetime('now'), datetime('now'), random())", insertuser)
 
-	ps("insert into branches(userid, docid, blobid, parentid, pos) "
+	ps("insert into branches(name, parent, pos, document, user) "
 	   "values(?, ?, ?, ?, ?)", insertbranch);
-	ps("select id, blobid, parentid, pos from branches where "
-	   "docid = ?", selectdocument);
+	ps("select name, id, parent, pos, document from branches where "
+	   "user = ?", selectbranches);
+
 
 #define q(fun, path) { http_callback_ ## fun, Bs(path) }
 
@@ -327,6 +359,7 @@ int main(int argc, char **argv)
 		q(root, "/"),
 		q(newbranch, "/api/0/newbranch"),
 		q(branch, "/api/0/branch/"),
+		q(branches, "/api/0/branches"),
 		q(feed, "/api/0/feed"),
 		q(user, "/api/0/user"),
 		q(login, "/api/0/login"),

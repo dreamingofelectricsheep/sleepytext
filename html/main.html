@@ -1,6 +1,15 @@
 <html><head><title>Sleepy Text</title><meta name="viewport" content="user-scalable=no" /><script type="text/javascript">function isloggedin() {
-	if(document.cookie.indexOf('session') == -1) return false
-	return true;
+	var cookies = document.cookie.split(';')
+		.map(function(c) { 
+			var co = c.trim().split('=')
+			return { name: co[0], value: co[1] } })
+
+	var o = {}
+	for(var i in cookies) { o[cookies[i].name] = cookies[i].value }
+	cookies = o
+
+	if(cookies.session == undefined || cookies.session == '0') return false
+	return true
 }
 
 function enterloginview() {
@@ -52,11 +61,54 @@ function enterloginview() {
 	
 }
 
+function enteruserview() {
+	view = {}
+	
+	view.logout = tags.div({ id: 'logout', class: 'button' }, 'Log out')
+	view.logout.onclick = function() {
+		document.cookie = 'session=0'
+		view.leave()
+		enteraccountview()
+	}
+
+	view.createbtn = tags.div({ id: 'docbtn', class: 'button' }, 'New document')
+	
+	request('/api/0/branches', undefined, function(req) {
+		var t = req.responseText
+	
+		t = t.split('\n')
+		for(var i in t) {
+			var r = t[i].split(' ')
+			body.appendChild(tags.div({ class: 'document-entry' }, r[0]))
+		}
+	}, function() { alert('error loading documents') })
+
+
+	view.createbtn.onclick = function() {
+		request('/api/0/newbranch', 'test\n1 2 3 4 5', function(req) {
+			view.leave()
+			enteraccountview()
+		}, function() { alert("Error creating a new branch!") })
+	}
+			
+	
+
+	body.appendChild(view.createbtn)
+	body.appendChild(view.logout)
+
+	view.leave = function() {
+		while(body.firstChild != undefined)
+			body.removeChild(body.firstChild)
+	}	
+
+}
+
 function enteraccountview() {
 	view = {}
 
-	
-	enterloginview()
+	if(isloggedin() == true)
+		enteruserview()
+	else enterloginview()
 
 
 }</script><script type="text/javascript">var queue = [], intransfer = []
@@ -564,8 +616,8 @@ history.prototype = {
 	req.onreadystatechange = function() {
 		if(req.readyState != 4) return
 		if(req.status != 200 && typeof failure != undefined) 
-			failure(req.status)
-		if(typeof success != undefined) success()
+			failure(req)
+		if(typeof success != undefined) success(req)
 	}
 	
 	req.send(data)
@@ -754,6 +806,7 @@ body {
 	font: 20px serif normal;
 	background-image: none;
 	width: 100%;
+	height: 100%;
 	padding: 10px 20% 100px 20%;
 	border: none;
 	outline: none;
@@ -765,13 +818,19 @@ body {
 	cursor: pointer;
 	font-family: sans-serif;
 	font-size: 14px;
-	line-height: 24px;
+	line-height: 1.8em;
 	background: blue;
-	border-radius: 3px;
-	padding: 1px 12px;
-	margin: 3px;
+	border-radius: 0.4em;
+	padding: 0.1em 1em;
+	margin: 0.2em;
 	display: inline-block;
 }
+#logout {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+}
+
 #buttonbox {
 	position: fixed;
 	bottom: 0;
@@ -783,6 +842,10 @@ body {
 	position: static;
 	margin: 20px;
 	display: inline-block;
+}
+#docbtn {
+	margin: 100px;
+	font-size: 2em;
 }
 
 #password, #username {

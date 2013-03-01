@@ -53,6 +53,27 @@ bytes balloc(size_t length)
 	return r;
 }
 
+bytes bprintf(bytes b, const char *fmt, ...)
+{
+	va_list ptr;
+	va_start(ptr, fmt);
+	bytes result = b;
+	result.len = vsnprintf(b.as_void, b.len, fmt, ptr);
+	va_end(ptr);
+	return result;
+}
+	
+int bscanf(bytes b, const char *fmt, ...)
+{
+	va_list ptr;
+	va_start(ptr, fmt);
+	int r;
+	FILE * f = fmemopen(b.as_void, b.len, "r");
+	r = vfscanf(f, fmt, ptr);
+	va_end(ptr);
+	return r;
+}
+
 void bfree(bytes * buf)
 {
 	free(buf->as_char);
@@ -99,17 +120,29 @@ bytes itob(bytes buf, int number)
 	}
 }
 
-int btoi(bytes b)
+int64_t btoi64(bytes b)
 {
-	int acc = 0;
+	int64_t acc = 0;
+	bool neg = false;	
+	int i = 0;
 
-	for (int i = 0; i < b.length; i++) {
-		acc *= 10;
-		acc += b.as_char[i] - '0';
+	if(b.len > 0 && b.as_char[0] == '-') {
+		neg = true;
+		i++;
 	}
 
-	return acc;
+	for (; i < b.len; i++) {
+		acc *= 10;
+		int digit = b.as_char[i] - '0';
+		if(digit > 9 || digit < 0)
+			return 0;
+		acc += digit;
+	}
+
+	return neg == true ? -acc : acc;
 }
+
+int btoi(bytes b) { return btoi64(b); }
 
 bytes bslice(bytes string, size_t start, size_t end)
 {

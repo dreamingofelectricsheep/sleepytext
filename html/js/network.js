@@ -7,8 +7,8 @@ function request(addr, data, success, failure) {
 	req.onreadystatechange = function() {
 		if(req.readyState != 4) return
 		if(req.status != 200 && typeof failure != undefined) 
-			failure(req.status)
-		if(typeof success != undefined) success()
+			failure(req)
+		if(typeof success != undefined) success(req)
 	}
 	
 	req.send(data)

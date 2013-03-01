@@ -1,6 +1,15 @@
 function isloggedin() {
-	if(document.cookie.indexOf('session') == -1) return false
-	return true;
+	var cookies = document.cookie.split(';')
+		.map(function(c) { 
+			var co = c.trim().split('=')
+			return { name: co[0], value: co[1] } })
+
+	var o = {}
+	for(var i in cookies) { o[cookies[i].name] = cookies[i].value }
+	cookies = o
+
+	if(cookies.session == undefined || cookies.session == '0') return false
+	return true
 }
 
 function enterloginview() {
@@ -52,11 +61,54 @@ function enterloginview() {
 	
 }
 
+function enteruserview() {
+	view = {}
+	
+	view.logout = tags.div({ id: 'logout', class: 'button' }, 'Log out')
+	view.logout.onclick = function() {
+		document.cookie = 'session=0'
+		view.leave()
+		enteraccountview()
+	}
+
+	view.createbtn = tags.div({ id: 'docbtn', class: 'button' }, 'New document')
+	
+	request('/api/0/branches', undefined, function(req) {
+		var t = req.responseText
+	
+		t = t.split('\n')
+		for(var i in t) {
+			var r = t[i].split(' ')
+			body.appendChild(tags.div({ class: 'document-entry' }, r[0]))
+		}
+	}, function() { alert('error loading documents') })
+
+
+	view.createbtn.onclick = function() {
+		request('/api/0/newbranch', 'test\n1 2 3 4 5', function(req) {
+			view.leave()
+			enteraccountview()
+		}, function() { alert("Error creating a new branch!") })
+	}
+			
+	
+
+	body.appendChild(view.createbtn)
+	body.appendChild(view.logout)
+
+	view.leave = function() {
+		while(body.firstChild != undefined)
+			body.removeChild(body.firstChild)
+	}	
+
+}
+
 function enteraccountview() {
 	view = {}
 
-	
-	enterloginview()
+	if(isloggedin() == true)
+		enteruserview()
+	else enterloginview()
 
 
 }

@@ -22,7 +22,7 @@ struct http_ondata_result {
 	int error;
 };
 
-struct http_ondata_fn_result http_quick_result(int code)
+struct http_ondata_fn_result http_result(int code)
 {
 	return (struct http_ondata_fn_result) {
 		.header = (bytes) { 0, 0 }, 
@@ -87,7 +87,7 @@ struct http_ondata_fn_result http_websocket_accept(struct http_request * request
 	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
 	debug("Websocket protocol version: %d", version);
 
-	if(version != 13) return http_quick_result(http_bad_request);
+	if(version != 13) return http_result(http_bad_request);
 	debug("Websocket request received.");
 
 	bytes key = http_extract_param(request->header, Bs("Sec-WebSocket-Key"));
@@ -102,7 +102,7 @@ struct http_ondata_fn_result http_websocket_accept(struct http_request * request
 	unsigned char digest[20];
 	SHA1_Final(digest, &sha);
 	
-	struct http_ondata_fn_result result = http_quick_result(http_switching_protocols);
+	struct http_ondata_fn_result result = http_result(http_switching_protocols);
 	
 	BIO * b64 = BIO_new(BIO_f_base64());
 	BIO * mem = BIO_new(BIO_s_mem());
