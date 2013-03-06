@@ -30,6 +30,8 @@ typedef struct {
 	};
 } bytes;
 
+bytes bvoid = { 0, 0 };
+
 /* All functions here take into account the specified length of their arguments.
 No memory allocation is done! */
 
@@ -53,14 +55,24 @@ bytes balloc(size_t length)
 	return r;
 }
 
-bytes bprintf(bytes b, const char *fmt, ...)
+typedef struct {
+	bytes first, second;
+} bpair;
+
+bpair bprintf(bytes b, const char *fmt, ...)
 {
 	va_list ptr;
 	va_start(ptr, fmt);
 	bytes result = b;
 	result.len = vsnprintf(b.as_void, b.len, fmt, ptr);
 	va_end(ptr);
-	return result;
+	return (bpair) {
+		result, 
+		(bytes) {
+			.as_void = result.as_void + result.len,
+			.len = b.len - result.len
+		}
+	};
 }
 	
 int bscanf(bytes b, const char *fmt, ...)

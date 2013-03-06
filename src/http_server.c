@@ -26,7 +26,7 @@ struct http_request {
 	bytes addr;
 };
 
-typedef struct http_ondata_fn_result (*handler) (struct http_request * request);
+typedef struct http_raw_response (*handler) (struct http_request * request);
 
 struct http_callback_pair {
 	handler fun;
@@ -82,7 +82,8 @@ int setup_socket(uint16_t port, void *ondata, void *onclose, void *auxilary)
 	return sock;
 }
 
-struct http_ondata_fn_result http_server_callback_dispatch(struct http_server
+struct http_raw_response 
+http_server_callback_dispatch(struct http_server
 							   *s,
 							   struct http_request
 							   *request)
@@ -101,9 +102,7 @@ struct http_ondata_fn_result http_server_callback_dispatch(struct http_server
 			return s->callback[i].fun(request);
 	}
 
-	return (struct http_ondata_fn_result) {
-		.error = 0,.payload = (bytes) {
-	0, 0},.code = http_not_found};
+	return http_result(http_not_found);
 }
 
 struct http_tls_connection;
@@ -165,27 +164,24 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 
 		if(parsed.addr.len > 0) {
 
-			struct http_ondata_fn_result res =
-			
-			res = http_websocket_accept(&parsed);
-			if(res.code != http_switching_protocols)
+			struct http_raw_response res = 
+				http_websocket_accept(&parsed);
+
+			if(res.status!= http_switching_protocols)
 				res = http_server_callback_dispatch(http_tls->server, &parsed);
 
-			struct http_ondata_result final = http_assemble_response(res);
-
-			if (final.error < 0)
-				goto error;
+			struct http_response final = http_assemble_response(res);
 
 			debug("%s", SSL_state_string_long(http_tls->tls.tls));
-			debug("Response chunks: %zd", final.len);
-			for (int i = 0; i < final.len; i++) {
-				SSL_write(http_tls->tls.tls, final.array[i].as_void,
-					  final.array[i].len);
-				debug("%s", SSL_state_string_long(http_tls->tls.tls));
-			}
+			SSL_write(http_tls->tls.tls, final.header.as_void,
+				final.header.len);
+			SSL_write(http_tls->tls.tls, final.payload.as_void,
+				final.payload.len);
 
-			if (final.len != 0)
-				bfree(&http_tls->buffer);
+
+			bfree(&final.header);
+			bfree(&final.payload);
+			bfree(&http_tls->buffer);
 		}
 	}
 

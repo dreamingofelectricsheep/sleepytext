@@ -1,13 +1,18 @@
 var queue = [], intransfer = []
 var branches = []
+var docs = []
 
-function branch(past) {
+function branch(doc, past) {
 	this.past = past
 	this.present = []
 	this.time = new Date().getTime()
 	this.render = ''
+	this.doc = doc
 
 	branches.push(this)
+	if(docs[doc] == undefined) docs[doc] = []
+	
+	docs[doc].push(this)
 }
 
 branch.prototype = {

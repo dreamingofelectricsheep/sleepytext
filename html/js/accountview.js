@@ -77,15 +77,16 @@ function enteruserview() {
 		var t = req.responseText
 	
 		t = t.split('\n')
-		for(var i in t) {
-			var r = t[i].split(' ')
-			body.appendChild(tags.div({ class: 'document-entry' }, r[0]))
+		for(var i = 0; i < t.length - 1; i += 2) {
+			var r = t[i + 1].split(' ')
+			body.appendChild(tags.div({ class: 'document-entry' }, t[i]))
 		}
 	}, function() { alert('error loading documents') })
 
 
 	view.createbtn.onclick = function() {
-		request('/api/0/newbranch', 'test\n1 2 3 4 5', function(req) {
+		var newdoc =  Math.floor(Math.random() * 10000000) + 1
+		request('/api/0/newbranch', 'newbranch\n0 0 ' + newdoc, function(req) {
 			view.leave()
 			enteraccountview()
 		}, function() { alert("Error creating a new branch!") })

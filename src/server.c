@@ -40,7 +40,7 @@ struct insert {
 	uint32_t newlen;
 };
 
-#define http_callback_fun(id) struct http_ondata_fn_result \
+#define http_callback_fun(id) struct http_raw_response\
 	http_callback_ ## id(struct http_request * request)
 
 
@@ -71,11 +71,9 @@ http_callback_fun(root)
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	struct http_ondata_fn_result result = {
-		.error = 0,
-		.code = http_ok,
-		.payload = page
-	};
+	struct http_raw_response result = http_result(http_ok);
+	result.payload = page;
+
 
 	return result;
 }
@@ -85,13 +83,13 @@ http_callback_fun(branch)
 	int blobid = btoi(bslice(request->addr, Bs("/api/0/branch/").len, 0));
 
 	bytes path = balloc(256);
-	path = bprintf(path, "branches/%d", blobid);
+	path = bprintf(path, "branches/%d", blobid).first;
 
 	int f = open(path.as_char, O_RDONLY);
 	bytes page = balloc(1 << 20);
 	page.length = read(f, page.as_void, page.length);
 
-	struct http_ondata_fn_result result = http_result(http_ok);
+	struct http_raw_response result = http_result(http_ok);
 	result.payload = page;
 
 	return result;
@@ -123,12 +121,15 @@ http_callback_fun(login)
 		sqlite3_bind_int64(updatelastseen, 1, session);
 		sqlite3_step(updatelastseen);
 
-		struct http_ondata_fn_result result = http_result(http_ok);
-		bytes text = balloc(128);
-		text.len = snprintf(text.as_void, text.len, 
-				"Set-Cookie: session=%ld; path=/; secure\r\n\r\n", session);
-		result.header = text;
+		bytes mem = balloc(128);
 
+		struct http_raw_response result = http_result(http_ok);
+		result.headers = 1;
+		result.header_name[0] = Bs("Set-Cookie");
+		result.header_val[0] = bprintf(mem, 
+			"session=%ld; path=/; secure\r\n\r\n", session).first;
+
+		debug("Handling login");
 		return result;
 	} else {
 		return http_result(http_bad_request);
@@ -158,14 +159,13 @@ http_callback_fun(branches)
 		int64_t pos = sqlite3_column_int64(selectbranches, 3);
 		int64_t document = sqlite3_column_int64(selectbranches, 4);
 
-		bytes printed = bprintf(resp, "%*s\n%ld %ld %ld %ld ", (int) name.len, name.as_void, 
-				id, parent, pos, document);
-		printed.len--; // Remove the final '\0'
+		bytes printed = bprintf(resp, "%*s\n%ld %ld %ld %ld\n", (int) name.len, 
+				name.as_void, id, parent, pos, document).first;
 		resp.as_void += printed.len,
 			resp.len -= printed.len;
 	}
 
-	struct http_ondata_fn_result result = http_result(http_ok);
+	struct http_raw_response result = http_result(http_ok);
 	result.payload = (bytes) { .as_void = mem.as_void, .len = mem.len - resp.len };
 
 	return result;

@@ -1,34 +1,46 @@
 
 
 enum http_result {
-	http_ok,
+	http_ok = 0,
 	http_bad_request,
 	http_not_found,
 	http_forbidden,
-	http_switching_protocols
+	http_switching_protocols,
+	http_internal_server_error,
+	http_last
+};
+
+bytes http_result_text[] = {
+	Bs("200 Ok"),
+	Bs("400 Bad Request"),
+	Bs("404 Not Found"),
+	Bs("403 Forbidden"),
+	Bs("101 Switching Protocols"),
+	Bs("500 Internal Server Error")
 };
 
 
-struct http_ondata_fn_result {
-	int error;
-	int code;
+const size_t http_max_headers = 8;
+
+struct http_raw_response {
+	enum http_result status;
 	bytes payload;
-	bytes header;
+	size_t headers;
+	bytes header_val[http_max_headers];
+	bytes header_name[http_max_headers];
 } http_ondata_callback(struct http_request *request);
 
-struct http_ondata_result {
-	bytes array[5];
-	size_t len;
-	int error;
+struct http_response {
+	bytes header, 
+		payload;
 };
 
-struct http_ondata_fn_result http_result(int code)
+struct http_raw_response http_result(enum http_result status)
 {
-	return (struct http_ondata_fn_result) {
-		.header = (bytes) { 0, 0 }, 
-		.error = 0,
-		.code = code,
-		.payload = (bytes) { 0, 0 }};
+	return (struct http_raw_response) {
+		.headers = 0,
+		.status = status,
+		.payload = bvoid };
 }
 
 bytes http_extract_param(bytes header, bytes field)
@@ -48,7 +60,7 @@ struct http_request http_parse_request(bytes buffer)
 		debug("Partial http header.");
 
 		return (struct http_request) {
-			.addr = (bytes) { 0, 0}
+			.addr = (bytes) bvoid
 		};
 	}
 
@@ -70,7 +82,7 @@ struct http_request http_parse_request(bytes buffer)
 			     request.payload.len, contentlen);
 
 			return (struct http_request) {
-				.addr = (bytes) { 0, 0}
+				.addr = bvoid
 			};
 		}
 	}
@@ -83,7 +95,7 @@ struct http_request http_parse_request(bytes buffer)
 	return request;
 }
 
-struct http_ondata_fn_result http_websocket_accept(struct http_request * request) {
+struct http_raw_response http_websocket_accept(struct http_request * request) {
 	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
 	debug("Websocket protocol version: %d", version);
 
@@ -102,93 +114,68 @@ struct http_ondata_fn_result http_websocket_accept(struct http_request * request
 	unsigned char digest[20];
 	SHA1_Final(digest, &sha);
 	
-	struct http_ondata_fn_result result = http_result(http_switching_protocols);
+	struct http_raw_response result = http_result(http_switching_protocols);
 	
 	BIO * b64 = BIO_new(BIO_f_base64());
 	BIO * mem = BIO_new(BIO_s_mem());
 	BIO_push(b64, mem);
 	BIO_write(b64, digest, 20);
 	BIO_flush(b64);
-	bytes encoded = balloc(128);
-	encoded.len = BIO_read(mem, encoded.as_void, encoded.len);
+	bytes enstatusd = balloc(128);
+	enstatusd.len = BIO_read(mem, enstatusd.as_void, enstatusd.len);
 	BIO_free_all(b64);
 	
-	bytes header = balloc(256);
-	bytes tmp = bcat(header, Bs("Sec-WebSocket-Accept: "), encoded);
-	header = bcat(header, tmp, Bs("\r\n\r\n"));
+	result.headers = 1;
+	result.header_name[0] = Bs("Sec-WebSocket-Accept");
+	result.header_val[0] = enstatusd;
 		
 	
-	result.header = header;
 	return result;
 }
 
 
-struct http_ondata_result http_assemble_response(struct http_ondata_fn_result
-						 fnresult)
+// The result needs freeing
+struct http_response http_assemble_response(struct http_raw_response raw)
 {
-	struct http_ondata_result result = {
-		.len = 0,
-		.error = 0
-	};
+	struct http_response result = { bvoid, bvoid };
 
-	if (fnresult.error)
-		goto bad_request;
+	if(raw.status >= http_last)
+		raw = http_result(http_internal_server_error);
+	
 
-	switch (fnresult.code) {
-	case http_not_found:
-		debug("Not found.");
-		result.array[0] = Bs("HTTP/1.1 404 Not found\r\n"
-				     "Content-Length: 0\r\n\r\n");
-		result.len = 1;
-		break;
 
-	case http_ok:{
-			debug("Ok.");
-			bytes r = balloc(256);
-			r.len = snprintf(r.as_void, 256, "HTTP/1.1 200 Ok\r\n"
-					 "Content-Length: %zd\r\n",
-					 fnresult.payload.len);
+	bytes response_header_mem = balloc(4096);
 
-			result.array[0] = r;
-			if(fnresult.header.len > 0)
-				result.array[1] = fnresult.header;
-			else
-				result.array[1] = Bs("\r\n");
-			result.array[2] = fnresult.payload;
 
-			result.len = 3;
-			break;
-		}
+	bytes status = http_result_text[raw.status];
+	bpair p = bprintf(response_header_mem, "HTTP/1.1 %*s\r\n", status.len,
+		status.as_void);
 
- bad_request:
-	case http_bad_request:
-		debug("Bad request");
-		result.array[0] = Bs("HTTP/1.1 400 Bad Request\r\n"
-			"Content-Length: 0\r\n\r\n");
-		result.len = 1;
-		break;
-
-	case http_forbidden:
-
-		debug("Forbidden!");
-		result.array[0] = Bs("HTTP/1.1 403 Forbidden\r\n"
-			"Content-Length: 0\r\n\r\n");
-		result.len = 1;
-		break;
-	case http_switching_protocols:
-		debug("Switching protocols");
-		result.array[0] = Bs("HTTP/1.1 101 Switching Protocols\r\n"
-			"Upgrade: websocket\r\n"
+	
+	if(raw.status == http_switching_protocols) {
+		p = bprintf(p.second, "Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n");
-		result.array[1] = fnresult.header;
-		result.len = 2;
-		break;
-	default:
-		debug("ERROR!");
-		result.error = -1;
-		break;
-	};
+	}
+	else {
+		p = bprintf(p.second, "Content-Length: %zd\r\n", raw.payload.len);
+	}
 
+	
+	for(int i = 0; i < raw.headers; i++) {
+		p = bprintf(p.second, "%*s: %*s\r\n", 
+			raw.header_name[i].len, raw.header_name[i].as_void,
+			raw.header_val[i].len, raw.header_val[i].as_void);
+
+		bfree(&raw.header_val[i]);
+	}
+
+	p = bprintf(p.second, "\r\n");
+
+	result.header.as_void = response_header_mem.as_void;
+	result.header.len = p.second.as_void - response_header_mem.as_void;
+	
+	result.payload = raw.payload;
+	
 	return result;
 }
 
