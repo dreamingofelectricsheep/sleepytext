@@ -1,6 +1,14 @@
 
 
-enum http_result {
+struct http_request 
+{
+	bytes header;
+	bytes payload;
+	bytes addr;
+};
+
+enum http_result 
+{
 	http_ok = 0,
 	http_bad_request,
 	http_not_found,
@@ -10,7 +18,8 @@ enum http_result {
 	http_last
 };
 
-bytes http_result_text[] = {
+bytes http_result_text[] = 
+{
 	Bs("200 Ok"),
 	Bs("400 Bad Request"),
 	Bs("404 Not Found"),
@@ -22,25 +31,31 @@ bytes http_result_text[] = {
 
 const size_t http_max_headers = 8;
 
-struct http_raw_response {
+
+struct http_raw_response 
+{
 	enum http_result status;
 	bytes payload;
 	size_t headers;
 	bytes header_val[http_max_headers];
 	bytes header_name[http_max_headers];
-} http_ondata_callback(struct http_request *request);
+} 
+http_ondata_callback(struct http_request *request);
 
-struct http_response {
+struct http_response 
+{
 	bytes header, 
 		payload;
 };
 
 struct http_raw_response http_result(enum http_result status)
 {
-	return (struct http_raw_response) {
+	return (struct http_raw_response) 
+	{
 		.headers = 0,
 		.status = status,
-		.payload = bvoid };
+		.payload = bvoid 
+	};
 }
 
 bytes http_extract_param(bytes header, bytes field)
@@ -56,7 +71,8 @@ struct http_request http_parse_request(bytes buffer)
 
 	bfound f = bfind(buffer, Bs("\r\n\r\n"));
 
-	if (f.found.len == 0) {
+	if (f.found.len == 0) 
+	{
 		debug("Partial http header.");
 
 		return (struct http_request) {
@@ -95,7 +111,8 @@ struct http_request http_parse_request(bytes buffer)
 	return request;
 }
 
-struct http_raw_response http_websocket_accept(struct http_request * request) {
+struct http_raw_response http_websocket_accept(struct http_request * request) 
+{
 	int version = btoi(http_extract_param(request->header, Bs("Sec-WebSocket-Version")));
 	debug("Websocket protocol version: %d", version);
 
@@ -133,6 +150,121 @@ struct http_raw_response http_websocket_accept(struct http_request * request) {
 	return result;
 }
 
+struct http_websocket_frame 
+{
+	size_t len;
+	union
+	{
+		uint32_t mask;
+		uint8_t maskbytes[4];
+	};
+	bool parsed_header;
+	uint8_t buffer[14];
+	size_t header_len;
+	size_t state;
+};
+
+#define websocket_helper_7
+#define websocket_helper_16 uint16_t exlen;
+#define websocket_helper_64 uint64_t exlen;
+#define make_header_struct(i) \
+struct http_websocket_header ## i \
+{ \
+	uint8_t flags; \
+	uint8_t len; \
+	websocket_helper_ ## i \
+	uint32_t mask; \
+};
+
+make_header_struct(7)
+make_header_struct(16)
+make_header_struct(64)
+
+
+
+
+
+
+int http_websocket_parse_header(struct http_websocket_frame *frame)
+{
+	struct http_websocket_header7 * h = (void *) frame->buffer;
+	frame->state = 0;
+
+	if(frame->header_len < sizeof(struct http_websocket_header7)) 
+	{
+		return 0;
+	}
+	else if(h->len < 255)
+	{
+		frame->parsed_header = true;
+		frame->len = h->len - 128;
+		frame->mask = h->mask;
+		return sizeof(*h);
+	}
+	else if(frame->header_len >= sizeof(struct http_websocket_header16))
+	{
+		if(h->len == 255)
+		{
+			struct http_websocket_header16 * h16 = (void*)frame->buffer;
+			frame->parsed_header = true;
+			frame->len = h16->exlen;
+			frame->mask = h16->mask;
+			return sizeof(*h16);
+		}
+		else if(h->len == sizeof(struct http_websocket_header64))
+		{
+			struct http_websocket_header64 * h64 = (void*)frame->buffer;
+
+			frame->parsed_header = true;
+			frame->len = h64->exlen;
+			frame->mask = h64->mask;
+			return sizeof(*h64);
+		}
+	}
+	
+	return 0;
+}
+
+
+
+int http_websocket_parse(bytes data, bytes *out, struct http_websocket_frame *frame)
+{
+	int i = 0;
+	int k = 0;
+	while(data.len < i) 
+	{
+		if(frame->parsed_header == false)
+		{
+			int j = i;
+			for(; j < data.len && j - i < 14; j++, frame->header_len++)
+				frame->buffer[frame->header_len] = data.as_char[i];
+
+			int r = http_websocket_parse_header(frame);
+			
+			if(r == 0)
+			{
+				if(data.len > i + 1)
+					debug("Error parsing websocket frames.")
+				return -1;
+			}
+
+			i += r;
+		}
+		else
+		{
+			out->as_char[k] = data.as_char[i] ^ frame->maskbytes[frame->state % 4];
+			frame->state++;
+			i++;
+			k++;
+
+			if(k == frame->len) frame->parsed_header = false;
+		}
+	}
+
+	out->len = k;
+	return 0;
+}
+
 
 // The result needs freeing
 struct http_response http_assemble_response(struct http_raw_response raw)
@@ -152,16 +284,19 @@ struct http_response http_assemble_response(struct http_raw_response raw)
 		status.as_void);
 
 	
-	if(raw.status == http_switching_protocols) {
+	if(raw.status == http_switching_protocols)
+	{
 		p = bprintf(p.second, "Upgrade: websocket\r\n"
 			"Connection: Upgrade\r\n");
 	}
-	else {
+	else
+	{
 		p = bprintf(p.second, "Content-Length: %zd\r\n", raw.payload.len);
 	}
 
 	
-	for(int i = 0; i < raw.headers; i++) {
+	for(int i = 0; i < raw.headers; i++)
+	{
 		p = bprintf(p.second, "%*s: %*s\r\n", 
 			raw.header_name[i].len, raw.header_name[i].as_void,
 			raw.header_val[i].len, raw.header_val[i].as_void);
@@ -178,4 +313,6 @@ struct http_response http_assemble_response(struct http_raw_response raw)
 	
 	return result;
 }
+
+
 

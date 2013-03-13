@@ -20,31 +20,7 @@
 #include <openssl/err.h>
 #include <openssl/sha.h>
 
-struct http_request {
-	bytes header;
-	bytes payload;
-	bytes addr;
-};
 
-typedef struct http_raw_response (*handler) (struct http_request * request);
-
-struct http_callback_pair {
-	handler fun;
-	bytes addr;
-};
-
-struct http_server {
-	SSL_CTX *tls_ctx;
-	struct http_callback_pair callback[16];
-	size_t callbacks;
-};
-
-void http_server_add_callback(struct http_server *s,
-			      struct http_callback_pair p)
-{
-	s->callback[s->callbacks] = p;
-	s->callbacks++;
-}
 
 #include "http.c"
 #include "tls.c"
@@ -82,6 +58,31 @@ int setup_socket(uint16_t port, void *ondata, void *onclose, void *auxilary)
 	return sock;
 }
 
+
+
+
+
+
+
+typedef struct http_raw_response (*handler) (struct http_request * request);
+
+struct http_callback_pair {
+	handler fun;
+	bytes addr;
+};
+
+struct http_server {
+	SSL_CTX *tls_ctx;
+	struct http_callback_pair callback[16];
+	size_t callbacks;
+};
+
+void http_server_add_callback(struct http_server *s,
+			      struct http_callback_pair p)
+{
+	s->callback[s->callbacks] = p;
+	s->callbacks++;
+}
 struct http_raw_response 
 http_server_callback_dispatch(struct http_server
 							   *s,
@@ -104,6 +105,15 @@ http_server_callback_dispatch(struct http_server
 
 	return http_result(http_not_found);
 }
+
+
+
+
+
+
+
+
+
 
 struct http_tls_connection;
 
@@ -203,6 +213,22 @@ void http_tls_ondata(struct http_tls_connection *http_tls)
 	bfree(&writeb);
 	http_tls_onclose(http_tls);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void tls_listener_ondata(struct generic_epoll_object *data)
 {

@@ -12,6 +12,7 @@ Rework the html interface.
 	Interface for managing multiple files
 	Gracuful disconnection handling
 	When editing the same place from two devices, make the changes branch
+	WYSIWYG using the contenteditable=true and js html sanitizer
 
 Backend changes
 	DONE Split the server implementation from the logic
