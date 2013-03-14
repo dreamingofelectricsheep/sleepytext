@@ -162,8 +162,9 @@ http_callback_fun(branches)
 
 		bytes printed = bprintf(resp, "%*s\n%ld %ld %ld %ld\n", (int) name.len, 
 				name.as_void, id, parent, pos, document).first;
+
 		resp.as_void += printed.len,
-			resp.len -= printed.len;
+		resp.len -= printed.len;
 	}
 
 	struct http_raw_response result = http_result(http_ok);

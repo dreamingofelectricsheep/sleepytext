@@ -1,37 +1,38 @@
 var queue = [], intransfer = []
-var branches = []
-var docs = []
+var branches = {}
+var docs = {}
 
-function branch(doc, past) {
-	this.past = past
-	this.present = []
+function branch(id, parent, pos, document, data) {
+	this.id = id
+	this.parent = parent
+	this.pos = pos
+	this.document = document
+	this.data = data == undefined ? [] : data
 	this.time = new Date().getTime()
 	this.render = ''
-	this.doc = doc
 
-	branches.push(this)
-	if(docs[doc] == undefined) docs[doc] = []
-	
-	docs[doc].push(this)
+	branches[id] = this
+
+	if(docs[document] == undefined) docs[document] = []
+
+	docs[document].push(this)
 }
 
 branch.prototype = {
 	getlength: function() {
-		var past = 0
-		if(this.past) past = this.past.at
-		return past + this.present.length 
+		return this.gethistory().length
 	},
 	gethistory: function() {
 		var past = this.getprecedinghistory()
-		return new history(past.concat(this.present))
+		return new history(past.concat(this.data))
 	},
 	getprecedinghistory: function() {
 		var result = []
 
-		if(this.past) {
-			result = this.past.branch.getprecedinghistory()
-			result = result.concat(this.past.branch.present.slice(0,
-				this.past.at - result.length))
+		if(this.parent != 0) {
+			result = branches[this.parent].getprecedinghistory()
+			result = result.concat(branches[this.parent].data.slice(0,
+				this.pos - result.length))
 		}
 
 		return result

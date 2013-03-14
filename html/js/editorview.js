@@ -17,7 +17,8 @@ function entereditorview(activebranch) {
 		view.editor.last = view.editor.value = view.history.render
 	})
 
-	view.branch = activebranch == undefined ? new branch() : activebranch
+	view.branch = activebranch == undefined ? 
+		new branch(1, 0, 0, 1) : activebranch
 	view.history = view.branch.gethistory()
 
 	view.history.render = view.editor.last = view.editor.value = view.branch.render
@@ -57,7 +58,7 @@ function entereditorview(activebranch) {
 			now: ts }
 
 		queue.push(change)
-		view.branch.present.push(change)
+		view.branch.data.push(change)
 		view.history.steps.push(change)
 		view.history.position = view.history.steps.length
 
@@ -70,21 +71,10 @@ function entereditorview(activebranch) {
 
 		var pointer = view.history.position
 	
-		
-		while(true) {
-			if(i.past == undefined) {
-				past = { branch: i, at: pointer }
-				break;
-			}
-			if(i.past.at > pointer) {
-				i = i.past.branch
-			} else {
-				past = { branch: i, at: pointer }
-				break;
-			}
-		}
-		
-		view.branch = new branch(view.branch.doc, past)
+	
+		view.branch = new branch(Math.floor(Math.random()*10000),
+			view.branch.id, pointer, view.branch.doc)
+
 		view.history = view.branch.gethistory()
 		view.history.position = view.history.steps.length
 

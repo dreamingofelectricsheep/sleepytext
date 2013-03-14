@@ -73,27 +73,27 @@ function entergraphview(lastbranch) {
 	}
 	
 
-	for(var i = 0; i < branches.length; ++i) {
+	for(var i in branches) {
 		var color = undefined;
-		if(branches[i].past == undefined) color = '#1987D1'
+		if(branches[i].parent == 0) color = '#1987D1'
 
-		var s = branches[i].present.length
+		var s = branches[i].data.length
 		if(s < 1) s = 1
 		s = 7 + Math.log(s) * 2
 
 		
-		var v = g.createVertex(branches[i].time, color, s, branches[i].render)
+		var v = g.createVertex(i, color, s, branches[i].render)
 
-		if(branches[i].time == lastbranch.time)
+		if(i == lastbranch.id)
 			g.active = v
 
 		v.branch = branches[i]	
 	}
 	
 
-	for(var i = 0; i < branches.length; ++i) {
-		if(branches[i].past)
-			g.createEdge(branches[i].past.branch.time, branches[i].time)	
+	for(var i in branches) {
+		if(branches[i].parent != 0)
+			g.createEdge(branches[i].parent, i)	
 	}
 
 
