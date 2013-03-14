@@ -8,6 +8,14 @@ body {
 	cursor: pointer;
 }
 
+.loading
+{
+	font: 5em normal serif;
+	color: silver;
+	margin: auto;
+	margin-top: 10%;
+}
+
 .unselectable, .slider-bar, #graphbutton, #branchbutton {
 	-webkit-touch-callout: none;
 	-webkit-user-select: none;

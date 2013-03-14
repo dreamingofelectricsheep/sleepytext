@@ -2,20 +2,23 @@ var queue = [], intransfer = []
 var branches = {}
 var docs = {}
 
-function branch(id, parent, pos, document, data) {
-	this.id = id
-	this.parent = parent
-	this.pos = pos
-	this.document = document
-	this.data = data == undefined ? [] : data
+// Expected values: id, parent, pos, document
+// Optional: data
+function branch(o) {
+	for(var i in o)
+	{
+		this[i] = o[i]
+	}
+
+	this.data = o.data == undefined ? [] : data
 	this.time = new Date().getTime()
 	this.render = ''
 
-	branches[id] = this
+	branches[this.id] = this
 
-	if(docs[document] == undefined) docs[document] = []
+	if(docs[this.document] == undefined) docs[this.document] = []
 
-	docs[document].push(this)
+	docs[this.document].push(this)
 }
 
 branch.prototype = {

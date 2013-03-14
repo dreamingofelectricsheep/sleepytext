@@ -149,19 +149,15 @@ http_callback_fun(branches)
 	bytes mem = balloc(4096);
 	bytes resp = mem;
 
-	while(sqlite3_step(selectbranches) == SQLITE_ROW) {
+	while(sqlite3_step(selectbranches) == SQLITE_ROW)
+	{
+		int64_t id = sqlite3_column_int64(selectbranches, 0);
+		int64_t parent = sqlite3_column_int64(selectbranches, 1);
+		int64_t pos = sqlite3_column_int64(selectbranches, 2);
+		int64_t document = sqlite3_column_int64(selectbranches, 3);
 
-		bytes name;
-		name.as_void = (void*) sqlite3_column_blob(selectbranches, 0);
-		name.len = sqlite3_column_bytes(selectbranches, 0);
-
-		int64_t id = sqlite3_column_int64(selectbranches, 1);
-		int64_t parent = sqlite3_column_int64(selectbranches, 2);
-		int64_t pos = sqlite3_column_int64(selectbranches, 3);
-		int64_t document = sqlite3_column_int64(selectbranches, 4);
-
-		bytes printed = bprintf(resp, "%*s\n%ld %ld %ld %ld\n", (int) name.len, 
-				name.as_void, id, parent, pos, document).first;
+		bytes printed = bprintf(resp, "%ld %ld %ld %ld\n", 
+				id, parent, pos, document).first;
 
 		resp.as_void += printed.len,
 		resp.len -= printed.len;
@@ -206,17 +202,14 @@ http_callback_fun(newbranch)
 
 
 
-	bfound f = bfind(request->payload, Bs("\n"));
-	bytes name = f.before;
-	bscanf(f.after, "%ld %ld %ld", &parent, &pos, &document);
+	bscanf(request->payload, "%ld %ld %ld", &parent, &pos, &document);
 
 
 	sqlite3_reset(insertbranch);
-	sqlite3_bind_text(insertbranch, 1, name.as_void, name.len, SQLITE_STATIC);
-	sqlite3_bind_int64(insertbranch, 2, parent);
-	sqlite3_bind_int64(insertbranch, 3, pos);
-	sqlite3_bind_int64(insertbranch, 4, document);
-	sqlite3_bind_int64(insertbranch, 5, user);
+	sqlite3_bind_int64(insertbranch, 1, parent);
+	sqlite3_bind_int64(insertbranch, 2, pos);
+	sqlite3_bind_int64(insertbranch, 3, document);
+	sqlite3_bind_int64(insertbranch, 4, user);
 
 	if (sqlite3_step(insertbranch) != SQLITE_DONE)
 		return http_result(http_bad_request);
@@ -364,9 +357,9 @@ int main(int argc, char **argv)
 	ps("insert into users(login, password, created, lastseen, session) "
 		"values(?, ?, datetime('now'), datetime('now'), random())", insertuser)
 
-	ps("insert into branches(name, parent, pos, document, user) "
-		"values(?, ?, ?, ?, ?)", insertbranch);
-	ps("select name, id, parent, pos, document from branches where "
+	ps("insert into branches(parent, pos, document, user) "
+		"values(?, ?, ?, ?)", insertbranch);
+	ps("select id, parent, pos, document from branches where "
 		"user = ?", selectbranches);
 
 

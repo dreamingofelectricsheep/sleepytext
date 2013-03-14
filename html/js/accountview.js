@@ -73,16 +73,6 @@ function enteruserview() {
 
 	view.createbtn = tags.div({ id: 'docbtn', class: 'button' }, 'New document')
 	
-	request('/api/0/branches', undefined, function(req) {
-		var t = req.responseText
-	
-		t = t.split('\n')
-		for(var i = 0; i < t.length - 1; i += 2) {
-			var r = t[i + 1].split(' ')
-			body.appendChild(tags.div({ class: 'document-entry' }, t[i]))
-		}
-	}, function() { alert('error loading documents') })
-
 
 	view.createbtn.onclick = function() {
 		var newdoc =  Math.floor(Math.random() * 10000000) + 1
@@ -96,6 +86,21 @@ function enteruserview() {
 
 	body.appendChild(view.createbtn)
 	body.appendChild(view.logout)
+
+	for(var i in docs)
+	{
+		var entry = tags.div({ class: 'document-entry' }, i)
+	
+		;(function(a) {
+		entry.onclick = function()
+		{
+			view.leave()
+			entergraphview(undefined, a)
+		}})(i)
+
+		body.appendChild(entry)
+	}
+
 
 	view.leave = function() {
 		while(body.firstChild != undefined)

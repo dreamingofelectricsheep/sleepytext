@@ -107,12 +107,16 @@ Graph.prototype.updateLayout = function() {
 	pulse *= 2 * Math.PI
 	pulse = (Math.sin(pulse) + 1) / 2
 
-		var v = this.active
+	var v = this.active
+
+	if(v != undefined)
+	{
 		this.ctx.beginPath();
 		this.ctx.arc(this.x + v.x, this.y + v.y, v.size + 7 + pulse * 3, 
 			0, 2 * Math.PI, false);
 		this.ctx.fillStyle = '#E0BC1B'
 		this.ctx.fill();	
+	}
 
 
 	for(var i in this.edges) {

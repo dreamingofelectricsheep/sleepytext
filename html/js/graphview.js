@@ -1,5 +1,5 @@
 
-function entergraphview(lastbranch) {
+function entergraphview(lastbranch, doc) {
 	view = {}
 	var canvas = view.canvas = document.createElement('canvas')
 	canvas.width = window.innerWidth
@@ -61,18 +61,17 @@ function entergraphview(lastbranch) {
 			vertex: active,
 			callback: function() {
 
-				lastbranch = active.branch
-				pointer = undefined
 	
 				body.classList.remove('clickable')
 				view.leave()
-				entereditorview(lastbranch)
+				entereditorview(active.branch)
 
 			}
 		}
 	}
 	
 
+	var branches = docs[doc]
 	for(var i in branches) {
 		var color = undefined;
 		if(branches[i].parent == 0) color = '#1987D1'
@@ -82,9 +81,9 @@ function entergraphview(lastbranch) {
 		s = 7 + Math.log(s) * 2
 
 		
-		var v = g.createVertex(i, color, s, branches[i].render)
+		var v = g.createVertex(branches[i].id, color, s, branches[i].render)
 
-		if(i == lastbranch.id)
+		if(lastbranch != undefined && branches[i].id == lastbranch.id)
 			g.active = v
 
 		v.branch = branches[i]	
@@ -93,7 +92,7 @@ function entergraphview(lastbranch) {
 
 	for(var i in branches) {
 		if(branches[i].parent != 0)
-			g.createEdge(branches[i].parent, i)	
+			g.createEdge(branches[i].parent, branches[i].id)	
 	}
 
 

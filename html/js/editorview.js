@@ -18,7 +18,10 @@ function entereditorview(activebranch) {
 	})
 
 	view.branch = activebranch == undefined ? 
-		new branch(1, 0, 0, 1) : activebranch
+		new branch({
+			id: 1, parent: 0, pos: 0, document: 1
+		}) : activebranch
+
 	view.history = view.branch.gethistory()
 
 	view.history.render = view.editor.last = view.editor.value = view.branch.render
@@ -72,8 +75,9 @@ function entereditorview(activebranch) {
 		var pointer = view.history.position
 	
 	
-		view.branch = new branch(Math.floor(Math.random()*10000),
-			view.branch.id, pointer, view.branch.doc)
+		view.branch = new branch({
+			id: Math.floor(Math.random()*10000),
+			parent: view.branch.id, pos: pointer, document: view.branch.document })
 
 		view.history = view.branch.gethistory()
 		view.history.position = view.history.steps.length
@@ -94,7 +98,7 @@ function entereditorview(activebranch) {
 	view.graph.onclick = function() {
 		var lastbranch = view.branch
 		view.leave()
-		entergraphview(lastbranch)
+		entergraphview(lastbranch, lastbranch.document)
 	}
 	
 	body.appendChild(view.editor)
