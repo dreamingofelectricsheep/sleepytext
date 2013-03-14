@@ -84,7 +84,7 @@ function entereditorview(activebranch) {
 			}
 		}
 		
-		view.branch = new branch(past)
+		view.branch = new branch(view.branch.doc, past)
 		view.history = view.branch.gethistory()
 		view.history.position = view.history.steps.length
 

@@ -34,7 +34,8 @@ sqlite3_stmt *selectbranches;
 
 int lastblob = 0;
 
-struct insert {
+struct insert
+{
 	uint32_t pos;
 	uint32_t lastlen;
 	uint32_t newlen;
@@ -225,49 +226,62 @@ http_callback_fun(newbranch)
 
 http_callback_fun(feed)
 {
-	/*
-	   int user = 1;
-	   int socket = 1;
-	   sqlite3_reset(selectlock);
-	   sqlite3_bind_int(selectlock, 1, user);
-	   if (sqlite3_step(selectlock) != SQLITE_ROW)
-	   return http_result(http_bad_request);
+	bytes p = request->payload;
+	bytes commit = 
+	{ 
+		.len = 0, 
+		.as_void = p.as_void 
+	};
 
-	   int lock = sqlite3_column_int(selectlock, 0);
-	   debug("Locked to %d, trying %d", lock, socket);
-	   if (lock != socket)
-	   return http_result(http_forbidden);
+	int file = -1;
 
-	   bytes p = request->payload;
-	   bytes commit = { .len = 0, .as_void = p.as_void };
-	   while(p.len > 0) {
-	   if(p.as_char[0] == 'b') {
-	   write(http->file, commit.as_void, commit.len);
+	while(p.len > 0) 
+	{
+		if(p.as_char[0] == 'b')
+		{
+			if(file != -1) write(file, commit.as_void, commit.len);
 
-	   if(http->file != -1) { close(http->file); http->file = -1; }
-	   bytes bid = bslice(p, 1, 5);
-	   if(bid.len != 4) { debug("Needs 4 bytes."); return http_bad_request; }
+			bytes bid = bslice(p, 1, 5);
 
-	   uint32_t id = ntohl(*((uint32_t*)bid.as_void));
+			if(bid.len != 4)
+			{
+				debug("Needs 4 bytes.");
+				return http_result(http_bad_request);
+			}
 
-	   bytes path = balloc(256);
-	   snprintf(path.as_void, path.len, "./branches/%d", id);
-			http->file = open(path.as_char, O_APPEND | O_CREAT | O_RDWR);
+			uint32_t id = ntohl(*((uint32_t*)bid.as_void));
+
+			bytes path = balloc(256);
+			bprintf(path, "./branches/%d", id);
+			file = open(path.as_char, O_APPEND | O_CREAT | O_RDWR);
 			bfree(&path);
 
-			if(http->file == -1) { 
+			if(file == -1)
+			{ 
 				debug("Could not open a file: %s",strerror(errno));
-				return http_result(400);
+				return http_result(http_bad_request);
 			}
 
 			p = bslice(p, 5, 0);
-			commit = (bytes) { .len = 0, .as_void = p.as_void };
+
+			commit = (bytes) 
+			{ 
+				.len = 0, 
+				.as_void = p.as_void 
+			};
 		}
-		else if(p.as_char[0] == 'i') {
-			if(http->file == -1) { debug("No file."); return http_bad_request; }
-			if(p.len < 13) {
+		else if(p.as_char[0] == 'i') 
+		{
+			if(file == -1) 
+			{ 
+				debug("No file.");
+				return http_result(http_bad_request);
+			}
+
+			if(p.len < 13)
+			{
 				debug("Incomplete data structure.");
-				return http_result(400);
+				return http_result(http_bad_request);
 			}
 			
 			struct insert * i = (void *) (p.as_char + 1);
@@ -278,7 +292,7 @@ http_callback_fun(feed)
 
 			if(p.len < len) {
 				debug("Change lies."); 
-				return http_result(400);
+				return http_result(http_bad_request);
 			}
 
 			commit.len += len;
@@ -286,10 +300,12 @@ http_callback_fun(feed)
 		}
 		else {
 			debug("Unknown opcode: %d", p.as_char[0]);
-			return http_result(400);
+			return http_result(http_bad_request);
 		}
 	}
-	write(http->file, commit.as_void, commit.len);*/
+
+	write(file, commit.as_void, commit.len);
+
 	return http_result(http_ok);
 }
 
@@ -343,14 +359,14 @@ int main(int argc, char **argv)
 	ps("update users set password = ? where session = ?", updatepassword)
 	ps("update users set login = ? where session = ?", updatelogin)
 	ps("update users set lastseen = datetime('now') where session = ?",
-	   updatelastseen)
+		updatelastseen)
 	ps("insert into users(login, password, created, lastseen, session) "
-	   "values(?, ?, datetime('now'), datetime('now'), random())", insertuser)
+		"values(?, ?, datetime('now'), datetime('now'), random())", insertuser)
 
 	ps("insert into branches(name, parent, pos, document, user) "
-	   "values(?, ?, ?, ?, ?)", insertbranch);
+		"values(?, ?, ?, ?, ?)", insertbranch);
 	ps("select name, id, parent, pos, document from branches where "
-	   "user = ?", selectbranches);
+		"user = ?", selectbranches);
 
 
 #define q(fun, path) { http_callback_ ## fun, Bs(path) }
@@ -376,7 +392,7 @@ int main(int argc, char **argv)
 	}
 
 	int tls = setup_socket(8080, tls_listener_ondata,
-			       tls_listener_onclose, http);
+					tls_listener_onclose, http);
 
 	epoll_listen();
 
